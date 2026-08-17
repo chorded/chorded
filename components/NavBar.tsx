@@ -7,8 +7,8 @@ const DOWNLOAD_URL = process.env.NEXT_PUBLIC_DOWNLOAD_URL ?? "#";
 
 const navLinks = [
   { label: "Features", href: "#features" },
-  { label: "Pricing", href: "#pricing" },
   { label: "Documentation", href: "#docs" },
+  { label: "Pricing", href: "#pricing" },
 ];
 
 export default function NavBar() {

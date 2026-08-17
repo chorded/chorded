@@ -1,7 +1,7 @@
 ﻿const GUMROAD_MONTHLY_URL =
-  process.env.NEXT_PUBLIC_GUMROAD_MONTHLY_URL ?? "https://gumroad.com";
+  process.env.NEXT_PUBLIC_GUMROAD_MONTHLY_URL ?? "https://chorded.gumroad.com/l/1month";
 const GUMROAD_YEARLY_URL =
-  process.env.NEXT_PUBLIC_GUMROAD_YEARLY_URL ?? "https://gumroad.com";
+  process.env.NEXT_PUBLIC_GUMROAD_YEARLY_URL ?? "https://chorded.gumroad.com/l/1year";
 
 interface PlanCardProps {
   badge?: string;
@@ -30,11 +30,10 @@ function PlanCard({
 }: PlanCardProps) {
   return (
     <div
-      className={`relative flex flex-col rounded-2xl p-8 gap-6 transition-transform duration-300 hover:-translate-y-1 ${
-        highlighted
-          ? "bg-primary-container border-2 border-primary"
-          : "bg-surface-container border border-surface-container-high"
-      }`}
+      className={`relative flex flex-col rounded-2xl p-8 gap-6 transition-transform duration-300 hover:-translate-y-1 ${highlighted
+        ? "bg-primary-container border-2 border-primary"
+        : "bg-surface-container border border-surface-container-high"
+        }`}
     >
       {badge && (
         <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-primary text-on-primary text-xs font-semibold px-4 py-1 rounded-full tracking-wide shadow-lg">
@@ -44,9 +43,8 @@ function PlanCard({
 
       <div className="flex flex-col gap-2">
         <span
-          className={`text-label-md font-semibold tracking-widest uppercase ${
-            highlighted ? "text-primary" : "text-secondary"
-          }`}
+          className={`text-label-md font-semibold tracking-widest uppercase ${highlighted ? "text-primary" : "text-secondary"
+            }`}
         >
           {title}
         </span>
@@ -70,9 +68,8 @@ function PlanCard({
         {features.map((feat) => (
           <li key={feat} className="flex items-start gap-3">
             <span
-              className={`material-symbols-outlined text-base mt-0.5 ${
-                highlighted ? "text-primary" : "text-on-surface-variant"
-              }`}
+              className={`material-symbols-outlined text-base mt-0.5 ${highlighted ? "text-primary" : "text-on-surface-variant"
+                }`}
             >
               check_circle
             </span>
@@ -86,11 +83,10 @@ function PlanCard({
         target="_blank"
         rel="noopener noreferrer"
         id={`pricing-cta-${title.toLowerCase().replace(/\s+/g, "-")}`}
-        className={`mt-2 inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3.5 font-semibold text-label-md tracking-wide transition-all duration-200 hover:scale-95 active:scale-100 ${
-          highlighted
-            ? "bg-primary text-on-primary hover:brightness-110 shadow-lg shadow-primary/30"
-            : "custom-button"
-        }`}
+        className={`mt-2 inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3.5 font-semibold text-label-md tracking-wide transition-all duration-200 hover:scale-95 active:scale-100 ${highlighted
+          ? "bg-primary text-on-primary hover:brightness-110 shadow-lg shadow-primary/30"
+          : "custom-button"
+          }`}
       >
         <span className="material-symbols-outlined text-base">shopping_cart</span>
         {ctaLabel}
