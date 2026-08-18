@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Radio, Music, Lock, Moon, Sun } from 'lucide-react';
+import { Radio, Music, Lock, Moon, Sun, Link, Unlink, MicVocal } from 'lucide-react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -35,14 +35,31 @@ export default function LiveSessionPage() {
   const [zoom, setZoom] = useState(1.0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<any>(null);
+  
+  const [isFollowing, setIsFollowing] = useState(true);
+  const isFollowingRef = useRef(true);
+
+  useEffect(() => {
+    isFollowingRef.current = isFollowing;
+  }, [isFollowing]);
 
   // Client side dark mode toggle
   const [isDarkMode, setIsDarkMode] = useState(false);
+
+  // Client-only: vocalist mode — hides chords, shows only lyrics
+  const [noChords, setNoChords] = useState(false);
 
   useEffect(() => {
     // initialize from system preference
     if (typeof window !== 'undefined') {
       setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches);
+      
+      const params = new URLSearchParams(window.location.search);
+      const codeParam = params.get('code');
+      if (codeParam && codeParam.trim().length === 6) {
+        setRoomCode(codeParam.toUpperCase());
+        setIsJoined(true);
+      }
     }
   }, []);
 
@@ -83,6 +100,7 @@ export default function LiveSessionPage() {
         handleLeave();
       })
       .on('broadcast', { event: 'scroll-update' }, (payload) => {
+        if (!isFollowingRef.current) return;
         const { scrollRatio, zoom: newZoom } = payload.payload;
         setZoom(newZoom);
         
@@ -191,6 +209,33 @@ export default function LiveSessionPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* No Chords — vocalist mode */}
+          <button
+            onClick={() => setNoChords(prev => !prev)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+              noChords
+                ? 'bg-purple-500 text-white hover:bg-purple-600'
+                : isDarkMode
+                  ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+            title={noChords ? 'Show chords' : 'Hide chords (vocalist mode)'}
+          >
+            <MicVocal className="w-4 h-4" />
+            <span className="hidden sm:inline">{noChords ? 'Lyrics Only' : 'No Chords'}</span>
+          </button>
+          <button
+            onClick={() => setIsFollowing(!isFollowing)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+              isFollowing
+                ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' + (isDarkMode ? ' dark:bg-indigo-900/40 dark:text-indigo-400' : '')
+                : (isDarkMode ? 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white' : 'bg-slate-200 text-slate-500 hover:bg-slate-300 hover:text-slate-900')
+            }`}
+            title={isFollowing ? "Disable Auto-Follow" : "Enable Auto-Follow"}
+          >
+            {isFollowing ? <Link className="w-4 h-4" /> : <Unlink className="w-4 h-4" />}
+            <span className="hidden sm:inline">{isFollowing ? 'Following Host' : 'Manual Browse'}</span>
+          </button>
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
             className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-400 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900'}`}
@@ -240,7 +285,7 @@ export default function LiveSessionPage() {
                   </div>
                 )}
                 
-                <ContinuousSongView song={song} nashville={nashville} isDarkMode={isDarkMode} />
+                <ContinuousSongView song={song} nashville={nashville} isDarkMode={isDarkMode} noChords={noChords} />
               </div>
             ))}
             {/* Bottom breathing room */}
@@ -252,7 +297,14 @@ export default function LiveSessionPage() {
   );
 }
 
-const ContinuousSongView: React.FC<{ song: SongData, nashville: boolean, isDarkMode: boolean }> = ({ song, nashville, isDarkMode }) => {
+const ContinuousSongView: React.FC<{ song: SongData, nashville: boolean, isDarkMode: boolean, noChords?: boolean }> = ({ song, nashville, isDarkMode, noChords }) => {
+  const [localKey, setLocalKey] = useState(song.key);
+
+  // If the host changes the song entirely, reset localKey (optional, but good practice if songIndex re-renders)
+  useEffect(() => {
+    setLocalKey(song.key);
+  }, [song.key, song.songIndex]);
+
   const editor = useEditor({
     editable: false,
     extensions: [
@@ -280,8 +332,16 @@ const ContinuousSongView: React.FC<{ song: SongData, nashville: boolean, isDarkM
     };
   }, [editor]);
 
+  const handleTranspose = (semitones: number) => {
+    if (!editor) return;
+    editor.commands.transposeAllChords(semitones);
+    import('@/utils/transposer').then(({ transposeKey }) => {
+      setLocalKey(prevKey => transposeKey(prevKey, semitones));
+    });
+  };
+
   return (
-    <LiveViewerProvider nashville={nashville} songKey={song.key}>
+    <LiveViewerProvider nashville={nashville} songKey={localKey}>
       <div className={`rounded-xl shadow-lg overflow-hidden ${
         isDarkMode
           ? 'bg-slate-950 border border-slate-800 text-white'
@@ -296,17 +356,41 @@ const ContinuousSongView: React.FC<{ song: SongData, nashville: boolean, isDarkM
               {song.title}
             </h2>
           </div>
-          <span className={`px-3 py-1 rounded-lg text-sm font-bold shrink-0 ${
-            isDarkMode
-              ? 'bg-amber-950/50 border border-amber-700/40 text-amber-300'
-              : 'bg-amber-50 border border-amber-200 text-amber-800'
-          }`}>
-            Key: {song.key}
-          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className={`flex items-center rounded-lg overflow-hidden border ${
+              isDarkMode ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-slate-50'
+            }`}>
+              <button
+                onClick={() => handleTranspose(-1)}
+                className={`px-3 py-1 font-bold transition-colors ${
+                  isDarkMode ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-200 text-slate-600'
+                }`}
+                title="Transpose Down"
+              >
+                -
+              </button>
+              <span className={`px-3 py-1 text-sm font-bold border-x ${
+                isDarkMode
+                  ? 'border-slate-700 text-amber-400 bg-slate-950'
+                  : 'border-slate-200 text-indigo-700 bg-white'
+              }`}>
+                Key: {localKey}
+              </span>
+              <button
+                onClick={() => handleTranspose(1)}
+                className={`px-3 py-1 font-bold transition-colors ${
+                  isDarkMode ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-200 text-slate-600'
+                }`}
+                title="Transpose Up"
+              >
+                +
+              </button>
+            </div>
+          </div>
         </div>
 
         <div
-          className={isDarkMode ? 'presenter-dark-stage' : ''}
+          className={[isDarkMode ? 'presenter-dark-stage' : '', noChords ? 'presenter-no-chords' : ''].filter(Boolean).join(' ')}
           style={{
             '--page-margin-top': '32px',
             '--page-margin-bottom': '48px',

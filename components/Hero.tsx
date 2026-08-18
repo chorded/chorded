@@ -1,6 +1,55 @@
-const DOWNLOAD_URL = process.env.NEXT_PUBLIC_DOWNLOAD_URL ?? "#";
+import type { LatestRelease } from "@/app/api/latest-release/route";
 
-export default function Hero() {
+const FALLBACK_URL =
+  process.env.NEXT_PUBLIC_DOWNLOAD_URL ??
+  "https://github.com/chorded/chorded/releases/latest";
+
+async function getLatestRelease(): Promise<LatestRelease> {
+  try {
+    // Fetch directly from GitHub during server render — same logic as the API route
+    const res = await fetch(
+      "https://api.github.com/repos/chorded/chorded/releases/latest",
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          ...(process.env.GITHUB_TOKEN
+            ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` }
+            : {}),
+        },
+        next: { revalidate: 300 },
+      }
+    );
+
+    if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+
+    const data = await res.json();
+
+    const exeAsset = data.assets?.find(
+      (a: { name: string; browser_download_url: string }) =>
+        a.name.endsWith(".exe") && !a.name.endsWith(".blockmap")
+    );
+
+    return {
+      version: data.tag_name ?? "latest",
+      downloadUrl: exeAsset?.browser_download_url ?? data.html_url ?? FALLBACK_URL,
+      htmlUrl: data.html_url ?? FALLBACK_URL,
+    };
+  } catch {
+    return {
+      version: "",
+      downloadUrl: FALLBACK_URL,
+      htmlUrl: FALLBACK_URL,
+    };
+  }
+}
+
+export default async function Hero() {
+  const release = await getLatestRelease();
+
+  // Strip leading "v" for display: "v1.0.0" → "1.0.0"
+  const versionDisplay = release.version.replace(/^v/, "");
+
   return (
     <section
       id="hero"
@@ -21,7 +70,7 @@ export default function Hero() {
 
         <div className="pt-stack-md">
           <a
-            href={DOWNLOAD_URL}
+            href={release.downloadUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="custom-button inline-flex items-center gap-2 px-8 py-4 rounded-xl font-label-md text-label-md text-lg shadow-lg hover:shadow-xl transition-all"
@@ -30,7 +79,7 @@ export default function Hero() {
             Download Chorded for Windows (.exe)
           </a>
           <p className="mt-4 font-label-sm text-label-sm text-on-primary-container">
-            Version 1.2.0 | Free to try
+            {versionDisplay ? `Version ${versionDisplay}` : "Latest version"} | Free to try for 15 days
           </p>
         </div>
       </div>

@@ -1,24 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
+import Link from "next/link";
+import type { LatestRelease } from "@/app/api/latest-release/route";
 
-const DOWNLOAD_URL = process.env.NEXT_PUBLIC_DOWNLOAD_URL ?? "#";
+const FALLBACK_URL =
+  process.env.NEXT_PUBLIC_DOWNLOAD_URL ??
+  "https://github.com/chorded/chorded/releases/latest";
 
 const navLinks = [
   { label: "Features", href: "#features" },
-  { label: "Documentation", href: "#docs" },
+  { label: "Documentation", href: "#video" },
   { label: "Pricing", href: "#pricing" },
 ];
 
 export default function NavBar() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [downloadUrl, setDownloadUrl] = useState<string>(FALLBACK_URL);
+
+  useEffect(() => {
+    fetch("/api/latest-release")
+      .then((r) => r.json())
+      .then((data: LatestRelease) => {
+        if (data.downloadUrl) setDownloadUrl(data.downloadUrl);
+      })
+      .catch(() => {
+        // silently keep the fallback URL
+      });
+  }, []);
 
   return (
     <nav className="bg-surface/80 backdrop-blur-md shadow-sm w-full sticky top-0 z-50">
       <div className="flex justify-between items-center px-margin-edge max-w-container-max-width mx-auto h-24">
         {/* Logo */}
-        <div className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity">
           <Image
             src="/icon.png"
             alt="Chorded Logo"
@@ -29,7 +45,7 @@ export default function NavBar() {
           <span className="text-headline-md font-headline-md font-bold text-on-surface">
             CHORDED
           </span>
-        </div>
+        </Link>
 
         {/* Desktop nav links */}
         <div className="hidden md:flex gap-stack-lg items-center">
@@ -47,7 +63,7 @@ export default function NavBar() {
         {/* Desktop download CTA */}
         <div className="hidden md:block">
           <a
-            href={DOWNLOAD_URL}
+            href={downloadUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="custom-button font-label-md text-label-md px-4 py-2 rounded-lg flex items-center gap-2 hover:scale-95 transition-transform"
@@ -91,7 +107,7 @@ export default function NavBar() {
             </a>
           ))}
           <a
-            href={DOWNLOAD_URL}
+            href={downloadUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="custom-button font-label-md text-label-md px-4 py-2 rounded-lg flex items-center gap-2 w-fit"

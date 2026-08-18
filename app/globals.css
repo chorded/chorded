@@ -304,3 +304,17 @@ span[data-node-view-wrapper] {
 .presenter-dark-stage .chord-label input {
   color: #fbbf24 !important;
 }
+
+/* ─────────────────────────────────
+   Vocalist / No Chords Mode
+───────────────────────────────── */
+
+.presenter-no-chords .chord-label {
+  display: none !important;
+}
+
+.presenter-no-chords [data-chord-wrapper],
+.presenter-no-chords .chord-inline-wrapper {
+  display: inline !important;
+  vertical-align: baseline !important;
+}

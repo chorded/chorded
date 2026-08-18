@@ -1,14 +1,29 @@
-const VIDEO_ID = process.env.NEXT_PUBLIC_YOUTUBE_VIDEO_ID ?? "";
-
-const thumbnails = [
-  { label: "Live Performance Demo" },
-  { label: "Advanced Editing Tips" },
-  { label: "Cloud Sync Setup" },
+const videos = [
+  {
+    id: "ls_nmhgvigA",
+    title: "CHORDED Tutorial Walkthrough | Part 1",
+  },
+  {
+    id: "9N-HbsPyZNs",
+    title: "CHORDED Tutorial Walkthrough | Part 2",
+  },
+  {
+    id: "KBtc1Qy2Ibw",
+    title: "CHORDED Tutorial Walkthrough | Part 3",
+  },
+  {
+    id: "uo79cIN5gmY",
+    title: "CHORDED Tutorial Walkthrough | Part 4",
+  },
+  {
+    id: "bvDXvgpV2_Q",
+    title: "CHORDED Tutorial Walkthrough | Part 5",
+  },
 ];
 
 export default function VideoPitch() {
   return (
-    <section className="bg-[#1a2463] py-section-gap px-margin-edge text-white">
+    <section id="video" className="bg-[#1a2463] py-section-gap px-margin-edge text-white">
       <div className="max-w-container-max-width mx-auto">
         {/* Section header */}
         <div className="text-center mb-section-gap">
@@ -21,57 +36,39 @@ export default function VideoPitch() {
           </p>
         </div>
 
-        {/* Main video player */}
-        <div className="relative max-w-4xl mx-auto aspect-video bg-surface-container-lowest rounded-xl overflow-hidden border border-white/10 shadow-2xl group cursor-pointer mb-stack-lg">
-          {VIDEO_ID ? (
-            /* Real YouTube embed when env var is set */
-            <iframe
-              className="absolute inset-0 w-full h-full"
-              src={`https://www.youtube.com/embed/${VIDEO_ID}`}
-              title="Chorded — Quick Start Guide"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-          ) : (
-            /* Stitch-export styled placeholder */
-            <>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-20 h-20 bg-primary text-on-primary rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                  <span
-                    className="material-symbols-outlined text-4xl"
-                    style={{ fontVariationSettings: '"FILL" 1' }}
-                  >
-                    play_arrow
-                  </span>
-                </div>
-              </div>
-              <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/60 to-transparent">
-                <p className="font-label-md text-label-md">
-                  Quick Start Guide: Creating your first setlist
-                </p>
-              </div>
-            </>
-          )}
+        {/* Top row — 2 videos */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-gutter mb-gutter">
+          {videos.slice(0, 2).map((video) => (
+            <VideoCard key={video.id} video={video} />
+          ))}
         </div>
 
-        {/* Thumbnail grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-gutter max-w-4xl mx-auto">
-          {thumbnails.map((thumb) => (
-            <div key={thumb.label} className="space-y-2 cursor-pointer group">
-              <div className="aspect-video bg-surface-container rounded-lg overflow-hidden border border-white/5">
-                <div className="w-full h-full bg-primary/5 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-primary/40">
-                    movie
-                  </span>
-                </div>
-              </div>
-              <p className="font-label-sm text-label-sm text-primary-fixed-dim group-hover:text-white transition-colors">
-                {thumb.label}
-              </p>
-            </div>
+        {/* Middle row — 3 videos */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-gutter mb-gutter">
+          {videos.slice(2, 5).map((video) => (
+            <VideoCard key={video.id} video={video} />
           ))}
         </div>
       </div>
     </section>
+  );
+}
+
+function VideoCard({ video }: { video: { id: string; title: string } }) {
+  return (
+    <div className="space-y-3 group cursor-pointer">
+      <div className="relative aspect-video bg-surface-container-lowest rounded-xl overflow-hidden border border-white/10 shadow-lg">
+        <iframe
+          className="absolute inset-0 w-full h-full"
+          src={`https://www.youtube.com/embed/${video.id}`}
+          title={video.title}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      </div>
+      <p className="font-label-md text-label-md text-primary-fixed-dim group-hover:text-white transition-colors px-1">
+        {video.title}
+      </p>
+    </div>
   );
 }

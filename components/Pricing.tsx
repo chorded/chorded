@@ -1,4 +1,4 @@
-﻿const GUMROAD_MONTHLY_URL =
+const GUMROAD_MONTHLY_URL =
   process.env.NEXT_PUBLIC_GUMROAD_MONTHLY_URL ?? "https://chorded.gumroad.com/l/1month";
 const GUMROAD_YEARLY_URL =
   process.env.NEXT_PUBLIC_GUMROAD_YEARLY_URL ?? "https://chorded.gumroad.com/l/1year";
@@ -126,9 +126,9 @@ export default function Pricing() {
             period="/ month"
             description="Perfect for trying CHORDED or short-term projects."
             features={[
-              "Full access to all features",
-              "Software updates during license",
-              "Email support",
+              "Unrestricted access to all features",
+              "Free updates during active license",
+              "Dedicated email support",
             ]}
             ctaLabel="Buy 1-Month Key"
             ctaHref={GUMROAD_MONTHLY_URL}
@@ -142,10 +142,10 @@ export default function Pricing() {
             perMonth="approx. $4.92 / month — save 18%"
             description="Commit to your craft and save with an annual plan."
             features={[
-              "Full access to all features",
-              "Software updates during license",
+              "Unrestricted access to all features",
+              "Free updates during active license",
               "Priority email support",
-              "Lock in today's price",
+              "Lock in current pricing",
             ]}
             ctaLabel="Buy 1-Year Key"
             ctaHref={GUMROAD_YEARLY_URL}

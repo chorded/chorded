@@ -19,6 +19,9 @@ export const metadata: Metadata = {
   description:
     "CHORDED is a powerful desktop app for musicians to write, format, and perform chord charts and lyrics all in one place.",
   keywords: ["chord editor", "lyrics editor", "musician app", "setlist manager", "Nashville number system"],
+  icons: {
+    icon: "/iconblue.png",
+  },
 };
 
 export default function RootLayout({
