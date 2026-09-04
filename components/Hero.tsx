@@ -43,6 +43,11 @@ async function getLatestRelease(): Promise<LatestRelease> {
       downloadCount = latest.assets.reduce((sum: number, a: { download_count?: number }) => sum + (a.download_count || 0), 0);
     }
 
+    // Restore downloads lost when a GitHub asset was replaced/re-uploaded
+    // (GitHub resets download_count to 0 on asset deletion). Set DOWNLOAD_COUNT_OFFSET in Vercel env vars.
+    const offset = parseInt(process.env.DOWNLOAD_COUNT_OFFSET ?? "0", 10);
+    if (!isNaN(offset) && offset > 0) downloadCount += offset;
+
     return {
       version: latest.tag_name ?? "latest",
       downloadUrl: exeAsset?.browser_download_url ?? latest.html_url ?? FALLBACK_URL,
