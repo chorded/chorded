@@ -151,6 +151,15 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'signin' }: A
                     Resend confirmation link to {email || 'my email'}
                   </button>
                 )}
+                {(error.toLowerCase().includes('gumroad') || error.toLowerCase().includes('subscription')) && (
+                  <a
+                    href="#pricing"
+                    onClick={() => onClose()}
+                    className="mt-2.5 inline-block text-xs font-semibold text-blue-400 hover:text-blue-300 underline underline-offset-2"
+                  >
+                    View Pricing & Plans →
+                  </a>
+                )}
               </div>
             </div>
           </div>

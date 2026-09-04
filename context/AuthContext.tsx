@@ -94,6 +94,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUpWithEmail = async (email: string, password: string, displayName?: string) => {
+    try {
+      const verifyRes = await fetch('/api/auth/verify-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+
+      const verifyData = await verifyRes.json();
+      if (!verifyData.verified) {
+        return {
+          error: new Error(verifyData.error || 'No active Gumroad subscription found for this email address.'),
+        };
+      }
+    } catch (err: any) {
+      console.error('Subscription verification failed:', err);
+      return {
+        error: new Error('Failed to verify subscription. Please try again.'),
+      };
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
