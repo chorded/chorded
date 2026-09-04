@@ -7,11 +7,12 @@ export interface LatestRelease {
   version: string;
   downloadUrl: string;
   htmlUrl: string;
+  downloadCount: number;
 }
 
 export async function GET() {
   try {
-    const res = await fetch(GITHUB_API, {
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases`, {
       headers: {
         Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
@@ -28,18 +29,35 @@ export async function GET() {
       throw new Error(`GitHub API responded with ${res.status}`);
     }
 
-    const data = await res.json();
+    const releases = await res.json();
+    const latest = Array.isArray(releases) ? releases[0] : releases;
+
+    if (!latest) {
+      throw new Error("No releases found");
+    }
 
     // Find the .exe installer asset (ignore .blockmap, .yml, etc.)
-    const exeAsset = data.assets?.find(
+    const exeAsset = latest.assets?.find(
       (a: { name: string; browser_download_url: string }) =>
         a.name.endsWith(".exe") && !a.name.endsWith(".blockmap")
     );
 
+    // Calculate total download count across all releases & assets
+    let downloadCount = 0;
+    if (Array.isArray(releases)) {
+      downloadCount = releases.reduce((total: number, rel: { assets?: { download_count?: number }[] }) => {
+        const relSum = rel.assets?.reduce((sum, a) => sum + (a.download_count || 0), 0) ?? 0;
+        return total + relSum;
+      }, 0);
+    } else if (latest.assets) {
+      downloadCount = latest.assets.reduce((sum: number, a: { download_count?: number }) => sum + (a.download_count || 0), 0);
+    }
+
     const release: LatestRelease = {
-      version: data.tag_name ?? data.name ?? "latest",
-      downloadUrl: exeAsset?.browser_download_url ?? data.html_url,
-      htmlUrl: data.html_url,
+      version: latest.tag_name ?? latest.name ?? "latest",
+      downloadUrl: exeAsset?.browser_download_url ?? latest.html_url,
+      htmlUrl: latest.html_url,
+      downloadCount,
     };
 
     return NextResponse.json(release, {

@@ -14,7 +14,7 @@ export default function Footer() {
             Chorded
           </span>
           <span className="font-label-sm text-label-sm text-secondary">
-            © 2026 Chorded. Precision-crafted for musicians.
+            © 2026 Chorded. All Rights Reserved.
           </span>
         </div>
 

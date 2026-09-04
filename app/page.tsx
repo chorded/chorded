@@ -3,6 +3,7 @@ import Hero from "@/components/Hero";
 import Features from "@/components/Features";
 import MoreFeatures from "@/components/MoreFeatures";
 import VideoPitch from "@/components/VideoPitch";
+import MyStory from "@/components/MyStory";
 import Pricing from "@/components/Pricing";
 import Footer from "@/components/Footer";
 
@@ -15,6 +16,7 @@ export default function Home() {
         <Features />
         <MoreFeatures />
         <VideoPitch />
+        <MyStory />
         <Pricing />
       </main>
       <Footer />

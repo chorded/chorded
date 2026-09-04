@@ -13,9 +13,12 @@ const FALLBACK_URL =
   process.env.NEXT_PUBLIC_DOWNLOAD_URL ??
   "https://github.com/chorded/chorded/releases/latest";
 
+const SALE_END_DATE = new Date("2026-11-01T01:00:00");
+
 const navLinks = [
   { label: "Features", href: "/#features" },
   { label: "Documentation", href: "/#video" },
+  { label: "My Story", href: "/#story" },
   { label: "Pricing", href: "/#pricing" },
 ];
 
@@ -26,9 +29,19 @@ export default function NavBar() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState<string>(FALLBACK_URL);
+  const [isSaleActive, setIsSaleActive] = useState<boolean>(true);
 
   const isLibraryActive = pathname === "/library" || pathname?.startsWith("/library/");
   const isSetlistActive = pathname === "/mysetlist" || pathname?.startsWith("/mysetlist/");
+
+  useEffect(() => {
+    const checkSaleStatus = () => {
+      setIsSaleActive(new Date() < SALE_END_DATE);
+    };
+    checkSaleStatus();
+    const interval = setInterval(checkSaleStatus, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     fetch("/api/latest-release")
@@ -65,9 +78,14 @@ export default function NavBar() {
               <a
                 key={link.label}
                 href={link.href}
-                className="font-label-md text-label-md text-zinc-400 font-medium hover:text-white transition-colors duration-200"
+                className="font-label-md text-label-md text-zinc-400 font-medium hover:text-white transition-colors duration-200 flex items-center gap-1.5"
               >
-                {link.label}
+                <span>{link.label}</span>
+                {link.label === "Pricing" && isSaleActive && (
+                  <span className="text-[10px] font-extrabold uppercase bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 text-slate-950 px-1.5 py-0.5 rounded-full shadow-md shadow-orange-500/25 border border-amber-200/60 inline-flex items-center gap-0.5 leading-none animate-pulse">
+                    🔥 Sale
+                  </span>
+                )}
               </a>
             ))}
 
@@ -75,22 +93,20 @@ export default function NavBar() {
               <>
                 <Link
                   href="/library"
-                  className={`font-label-md text-label-md flex items-center gap-1.5 transition-colors duration-200 ${
-                    isLibraryActive
+                  className={`font-label-md text-label-md flex items-center gap-1.5 transition-colors duration-200 ${isLibraryActive
                       ? "text-blue-400 font-semibold"
                       : "text-zinc-400 font-medium hover:text-white"
-                  }`}
+                    }`}
                 >
                   <Library className="w-4 h-4" />
                   My Library
                 </Link>
                 <Link
                   href="/mysetlist"
-                  className={`font-label-md text-label-md flex items-center gap-1.5 transition-colors duration-200 ${
-                    isSetlistActive
+                  className={`font-label-md text-label-md flex items-center gap-1.5 transition-colors duration-200 ${isSetlistActive
                       ? "text-blue-400 font-semibold"
                       : "text-zinc-400 font-medium hover:text-white"
-                  }`}
+                    }`}
                 >
                   <Music className="w-4 h-4" />
                   MySetlist
@@ -133,11 +149,10 @@ export default function NavBar() {
                         <Link
                           href="/library"
                           onClick={() => setUserDropdownOpen(false)}
-                          className={`flex items-center gap-2 px-3.5 py-2 hover:bg-white/5 transition-colors ${
-                            isLibraryActive
+                          className={`flex items-center gap-2 px-3.5 py-2 hover:bg-white/5 transition-colors ${isLibraryActive
                               ? "text-blue-400 font-semibold bg-blue-500/10"
                               : "text-zinc-300 hover:text-white"
-                          }`}
+                            }`}
                         >
                           <Library className={`w-3.5 h-3.5 ${isLibraryActive ? "text-blue-400" : "text-zinc-400"}`} />
                           My Library
@@ -146,11 +161,10 @@ export default function NavBar() {
                         <Link
                           href="/mysetlist"
                           onClick={() => setUserDropdownOpen(false)}
-                          className={`flex items-center gap-2 px-3.5 py-2 hover:bg-white/5 transition-colors ${
-                            isSetlistActive
+                          className={`flex items-center gap-2 px-3.5 py-2 hover:bg-white/5 transition-colors ${isSetlistActive
                               ? "text-blue-400 font-semibold bg-blue-500/10"
                               : "text-zinc-300 hover:text-white"
-                          }`}
+                            }`}
                         >
                           <Music className={`w-3.5 h-3.5 ${isSetlistActive ? "text-blue-400" : "text-zinc-400"}`} />
                           MySetlist
@@ -186,7 +200,7 @@ export default function NavBar() {
               rel="noopener noreferrer"
               className="custom-button font-label-md text-label-md px-4 py-2 rounded-lg flex items-center gap-2 hover:scale-95 transition-transform"
             >
-              Download App
+              Download
             </a>
           </div>
 
@@ -219,9 +233,14 @@ export default function NavBar() {
                 key={link.label}
                 href={link.href}
                 onClick={() => setMenuOpen(false)}
-                className="font-label-md text-label-md text-zinc-400 font-medium hover:text-white transition-colors duration-200"
+                className="font-label-md text-label-md text-zinc-400 font-medium hover:text-white transition-colors duration-200 flex items-center justify-between w-full"
               >
-                {link.label}
+                <span>{link.label}</span>
+                {link.label === "Pricing" && isSaleActive && (
+                  <span className="text-[10px] font-extrabold uppercase bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 text-slate-950 px-2 py-0.5 rounded-full shadow-md shadow-orange-500/25 border border-amber-200/60 inline-flex items-center gap-1 leading-none animate-pulse">
+                    🔥 Launch Sale $19.99
+                  </span>
+                )}
               </a>
             ))}
 
@@ -230,11 +249,10 @@ export default function NavBar() {
                 <Link
                   href="/library"
                   onClick={() => setMenuOpen(false)}
-                  className={`font-label-md text-label-md flex items-center gap-2 transition-colors duration-200 ${
-                    isLibraryActive
+                  className={`font-label-md text-label-md flex items-center gap-2 transition-colors duration-200 ${isLibraryActive
                       ? "text-blue-400 font-semibold"
                       : "text-zinc-400 font-medium hover:text-white"
-                  }`}
+                    }`}
                 >
                   <Library className="w-4 h-4" />
                   My Library
@@ -242,11 +260,10 @@ export default function NavBar() {
                 <Link
                   href="/mysetlist"
                   onClick={() => setMenuOpen(false)}
-                  className={`font-label-md text-label-md flex items-center gap-2 transition-colors duration-200 ${
-                    isSetlistActive
+                  className={`font-label-md text-label-md flex items-center gap-2 transition-colors duration-200 ${isSetlistActive
                       ? "text-blue-400 font-semibold"
                       : "text-zinc-400 font-medium hover:text-white"
-                  }`}
+                    }`}
                 >
                   <Music className="w-4 h-4" />
                   MySetlist

@@ -8,7 +8,7 @@ async function getLatestRelease(): Promise<LatestRelease> {
   try {
     // Fetch directly from GitHub during server render — same logic as the API route
     const res = await fetch(
-      "https://api.github.com/repos/chorded/chorded/releases/latest",
+      "https://api.github.com/repos/chorded/chorded/releases",
       {
         headers: {
           Accept: "application/vnd.github+json",
@@ -23,23 +23,38 @@ async function getLatestRelease(): Promise<LatestRelease> {
 
     if (!res.ok) throw new Error(`GitHub API ${res.status}`);
 
-    const data = await res.json();
+    const releases = await res.json();
+    const latest = Array.isArray(releases) ? releases[0] : releases;
 
-    const exeAsset = data.assets?.find(
+    if (!latest) throw new Error("No releases found");
+
+    const exeAsset = latest.assets?.find(
       (a: { name: string; browser_download_url: string }) =>
         a.name.endsWith(".exe") && !a.name.endsWith(".blockmap")
     );
 
+    let downloadCount = 0;
+    if (Array.isArray(releases)) {
+      downloadCount = releases.reduce((total: number, rel: { assets?: { download_count?: number }[] }) => {
+        const relSum = rel.assets?.reduce((sum, a) => sum + (a.download_count || 0), 0) ?? 0;
+        return total + relSum;
+      }, 0);
+    } else if (latest.assets) {
+      downloadCount = latest.assets.reduce((sum: number, a: { download_count?: number }) => sum + (a.download_count || 0), 0);
+    }
+
     return {
-      version: data.tag_name ?? "latest",
-      downloadUrl: exeAsset?.browser_download_url ?? data.html_url ?? FALLBACK_URL,
-      htmlUrl: data.html_url ?? FALLBACK_URL,
+      version: latest.tag_name ?? "latest",
+      downloadUrl: exeAsset?.browser_download_url ?? latest.html_url ?? FALLBACK_URL,
+      htmlUrl: latest.html_url ?? FALLBACK_URL,
+      downloadCount,
     };
   } catch {
     return {
       version: "",
       downloadUrl: FALLBACK_URL,
       htmlUrl: FALLBACK_URL,
+      downloadCount: 0,
     };
   }
 }
@@ -58,7 +73,18 @@ export default async function Hero() {
       {/* Decorative radial blur — exact from Stitch export */}
       <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
 
-      <div className="max-w-4xl relative z-10 space-y-stack-lg">
+      <div className="max-w-4xl relative z-10 space-y-stack-lg flex flex-col items-center">
+        {release.downloadCount > 0 && (
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/15 text-xs md:text-sm font-medium text-blue-200 backdrop-blur-md shadow-sm mb-1">
+            <span className="flex h-2 w-2 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-400"></span>
+            </span>
+            <span className="material-symbols-outlined text-base text-blue-300">download</span>
+            <span>Over <strong className="text-white font-semibold">{release.downloadCount.toLocaleString()}</strong> downloads</span>
+          </div>
+        )}
+
         <h1 className="font-display-lg text-display-lg font-bold tracking-tight text-white">
           Write. Organize. Perform
         </h1>
@@ -68,7 +94,7 @@ export default async function Hero() {
           perform chord charts and lyrics all in one place.
         </p>
 
-        <div className="pt-stack-md">
+        <div className="pt-stack-md flex flex-col items-center">
           <a
             href={release.downloadUrl}
             target="_blank"
@@ -79,7 +105,7 @@ export default async function Hero() {
             Download Chorded for Windows (.exe)
           </a>
           <p className="mt-4 font-label-sm text-label-sm text-on-primary-container">
-            {versionDisplay ? `Version ${versionDisplay}` : "Latest version"} | Free to try for 15 days
+            {versionDisplay ? `Version ${versionDisplay}` : "Latest version"} | Freemium & ChordedPro Available
           </p>
         </div>
       </div>

@@ -48,7 +48,7 @@ function deriveRoomCode(uuid: string): string {
 export default function StagePage() {
   const params = useParams();
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isSubscribed, checkingSubscription } = useAuth();
   const setlistId = params.id as string;
 
   const [setlist, setSetlist] = useState<Setlist | null>(null);
@@ -285,7 +285,7 @@ export default function StagePage() {
   };
 
   // ─────────────────────────────────────────────────────────────────────────
-  if (authLoading || loading) {
+  if (authLoading || loading || checkingSubscription) {
     return (
       <div className="min-h-screen bg-[#0E0E10] flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
@@ -301,6 +301,66 @@ export default function StagePage() {
         <button onClick={() => router.push('/mysetlist')} className="text-blue-400 hover:underline text-sm">
           ← Back to MySetlist
         </button>
+      </div>
+    );
+  }
+
+  if (isSubscribed === false) {
+    const gumroadUrl = process.env.NEXT_PUBLIC_GUMROAD_YEARLY_URL || process.env.NEXT_PUBLIC_GUMROAD_MONTHLY_URL || "https://chorded.gumroad.com/l/1year";
+    return (
+      <div className="min-h-screen bg-[#0A0A0C] flex flex-col items-center justify-center p-6 text-white relative overflow-hidden">
+        {/* Subtle background glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-600/15 blur-[120px] rounded-full pointer-events-none" />
+
+        <div className="relative z-10 max-w-lg w-full bg-[#141417] border border-blue-500/30 rounded-3xl p-8 text-center shadow-2xl backdrop-blur-xl">
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-semibold uppercase tracking-wider mb-6">
+            <Radio className="w-3.5 h-3.5 animate-pulse text-blue-400" />
+            <span>Pro Feature Required</span>
+          </div>
+
+          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight mb-3 text-white">
+            Stage Runner & Live Sync
+          </h2>
+
+          <p className="text-zinc-400 text-sm leading-relaxed mb-6">
+            Live setlist broadcasting and stage runner access are reserved for subscribers who purchased a subscription on Gumroad.
+          </p>
+
+          {/* Benefits list */}
+          <div className="bg-zinc-900/80 border border-white/5 rounded-2xl p-4 mb-6 text-left space-y-3">
+            <div className="flex items-center gap-3 text-xs text-zinc-300">
+              <div className="p-1.5 rounded-lg bg-blue-500/20 text-blue-400">
+                <Radio className="w-4 h-4" />
+              </div>
+              <span>Broadcast live setlist to band members via PIN / QR code</span>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-zinc-300">
+              <div className="p-1.5 rounded-lg bg-purple-500/20 text-purple-400">
+                <Music className="w-4 h-4" />
+              </div>
+              <span>Real-time Nashville numbering & instant key transposition</span>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-col gap-3">
+            <a
+              href={gumroadUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-3 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-sm rounded-xl transition duration-200 shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2"
+            >
+              Upgrade on Gumroad →
+            </a>
+            <button
+              onClick={() => router.push('/mysetlist')}
+              className="w-full py-2.5 px-4 bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-zinc-400 hover:text-white text-xs font-semibold rounded-xl transition duration-200"
+            >
+              ← Back to My Setlists
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

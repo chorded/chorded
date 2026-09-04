@@ -16,7 +16,7 @@ export async function POST(req: Request) {
       return NextResponse.json({
         verified: false,
         error: 'Gumroad API token is not configured on the server. Please set GUMROAD_ACCESS_TOKEN in .env.local.'
-      }, { status: 500 });
+      }, { status: 200 });
     }
 
     // Call Gumroad Sales API to check purchases/subscriptions for this email

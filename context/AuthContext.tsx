@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { User, Session } from '@supabase/supabase-js';
 
@@ -16,11 +16,14 @@ interface AuthContextType {
   profile: Profile | null;
   session: Session | null;
   loading: boolean;
+  isSubscribed: boolean | null;
+  checkingSubscription: boolean;
   signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUpWithEmail: (email: string, password: string, displayName?: string) => Promise<{ error: Error | null; data?: any }>;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  checkSubscription: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,6 +33,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null);
+  const [checkingSubscription, setCheckingSubscription] = useState(false);
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -46,6 +51,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Error fetching user profile:', err);
     }
   };
+
+  const checkSubscription = useCallback(async (): Promise<boolean> => {
+    if (!user?.email) {
+      setIsSubscribed(false);
+      return false;
+    }
+    setCheckingSubscription(true);
+    try {
+      const verifyRes = await fetch('/api/auth/verify-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email }),
+      });
+      const verifyData = await verifyRes.json();
+      const verified = Boolean(verifyData.verified);
+      setIsSubscribed(verified);
+      return verified;
+    } catch (err) {
+      console.error('Subscription verification error:', err);
+      setIsSubscribed(false);
+      return false;
+    } finally {
+      setCheckingSubscription(false);
+    }
+  }, [user?.email]);
 
   useEffect(() => {
     let mounted = true;
@@ -71,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await fetchProfile(session.user.id);
         } else {
           setProfile(null);
+          setIsSubscribed(null);
         }
         setLoading(false);
       }
@@ -81,6 +112,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (user?.email) {
+      checkSubscription();
+    } else {
+      setIsSubscribed(null);
+    }
+  }, [user?.email, checkSubscription]);
 
   const refreshProfile = async () => {
     if (user) {
@@ -94,26 +133,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUpWithEmail = async (email: string, password: string, displayName?: string) => {
-    try {
-      const verifyRes = await fetch('/api/auth/verify-subscription', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-
-      const verifyData = await verifyRes.json();
-      if (!verifyData.verified) {
-        return {
-          error: new Error(verifyData.error || 'No active Gumroad subscription found for this email address.'),
-        };
-      }
-    } catch (err: any) {
-      console.error('Subscription verification failed:', err);
-      return {
-        error: new Error('Failed to verify subscription. Please try again.'),
-      };
-    }
-
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -141,6 +160,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setSession(null);
     setProfile(null);
+    setIsSubscribed(null);
   };
 
   return (
@@ -150,11 +170,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         profile,
         session,
         loading,
+        isSubscribed,
+        checkingSubscription,
         signInWithEmail,
         signUpWithEmail,
         signInWithGoogle,
         signOut,
         refreshProfile,
+        checkSubscription,
       }}
     >
       {children}
