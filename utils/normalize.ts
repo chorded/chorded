@@ -28,23 +28,72 @@ function splitHardBreaks(content: JSONContent[]): JSONContent[] {
  * Normalizes content by converting hard breaks to paragraphs,
  * so that our DOM-based pagination can cleanly split lines across pages.
  */
-export function normalizeContent(content: string | JSONContent | null | undefined): JSONContent | string {
-  if (!content) return '<p></p>'
+export function normalizeContent(content: any): JSONContent | string {
+  if (!content) return { type: 'doc', content: [{ type: 'paragraph' }] };
 
-  if (typeof content === 'string') {
-    // Replace <br> with </p><p> to convert them into separate block elements
-    // This allows the pagination logic to push individual lines to the next page.
-    let html = content.replace(/<br\s*\/?>/gi, '</p><p>');
-    return html;
-  }
+  let parsed: any = content;
 
-  // Handle JSONContent
-  if (content.type === 'doc' && content.content) {
-    return {
-      ...content,
-      content: splitHardBreaks(content.content)
+  // Handle JSON stringified content
+  if (typeof parsed === 'string') {
+    const trimmed = parsed.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        parsed = JSON.parse(trimmed);
+      } catch {
+        // Leave as string
+      }
     }
   }
 
-  return content
+  // Handle plain HTML / text content
+  if (typeof parsed === 'string') {
+    let html = parsed.replace(/<br\s*\/?>/gi, '</p><p>');
+    return html;
+  }
+
+  // Handle CHORDED desktop SavedDocument format with editorContent
+  if (parsed && typeof parsed === 'object' && parsed.editorContent) {
+    parsed = parsed.editorContent;
+  }
+
+  // Handle bare Array of block nodes
+  if (Array.isArray(parsed)) {
+    return {
+      type: 'doc',
+      content: splitHardBreaks(parsed),
+    };
+  }
+
+  // Handle JSONContent object
+  if (parsed && typeof parsed === 'object') {
+    if (parsed.type === 'doc' && Array.isArray(parsed.content)) {
+      return {
+        ...parsed,
+        content: splitHardBreaks(parsed.content),
+      };
+    }
+
+    if (Array.isArray(parsed.content)) {
+      return {
+        type: 'doc',
+        content: splitHardBreaks(parsed.content),
+      };
+    }
+
+    if (parsed.type === 'doc') {
+      return {
+        ...parsed,
+        content: [],
+      };
+    }
+
+    if (parsed.type) {
+      return {
+        type: 'doc',
+        content: splitHardBreaks([parsed]),
+      };
+    }
+  }
+
+  return { type: 'doc', content: [{ type: 'paragraph' }] };
 }

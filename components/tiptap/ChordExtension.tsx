@@ -442,7 +442,7 @@ function createParagraphWithChords(lyric: string, chords: Array<{ chord: string;
  * Converts raw pasted text lines into an array of TipTap paragraph JSON objects.
  * Handles both inline bracketed chords ("[C]Amazing [F]grace") and two-line chord sheets.
  */
-function buildContentFromLines(lines: string[]): object[] {
+export function buildContentFromLines(lines: string[]): object[] {
   const content: object[] = []
   let i = 0
 

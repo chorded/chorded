@@ -35,7 +35,7 @@ export default function LiveSessionPage() {
   const [zoom, setZoom] = useState(1.0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<any>(null);
-  
+
   const [isFollowing, setIsFollowing] = useState(true);
   const isFollowingRef = useRef(true);
 
@@ -53,7 +53,7 @@ export default function LiveSessionPage() {
     // initialize from system preference
     if (typeof window !== 'undefined') {
       setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches);
-      
+
       const params = new URLSearchParams(window.location.search);
       const codeParam = params.get('code');
       if (codeParam && codeParam.trim().length === 6) {
@@ -103,14 +103,14 @@ export default function LiveSessionPage() {
         if (!isFollowingRef.current) return;
         const { scrollRatio, zoom: newZoom } = payload.payload;
         setZoom(newZoom);
-        
+
         // Apply scroll ratio
         const el = scrollContainerRef.current;
         if (el) {
           const targetScroll = scrollRatio * Math.max(1, el.scrollHeight - el.clientHeight);
           // Only scroll if we are reasonably far from the target to avoid jitter
           if (Math.abs(el.scrollTop - targetScroll) > 2) {
-             el.scrollTop = targetScroll;
+            el.scrollTop = targetScroll;
           }
         }
       })
@@ -168,11 +168,10 @@ export default function LiveSessionPage() {
                   maxLength={6}
                   value={roomCode}
                   onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                  className={`block w-full pl-10 pr-3 py-4 border rounded-xl leading-5 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:text-lg font-mono text-center tracking-[0.5em] ${
-                    isDarkMode 
-                      ? 'bg-slate-950 border-slate-700 text-white placeholder-slate-500' 
+                  className={`block w-full pl-10 pr-3 py-4 border rounded-xl leading-5 focus:outline-none focus:ring-2 focus:ring-indigo-500 sm:text-lg font-mono text-center tracking-[0.5em] ${isDarkMode
+                      ? 'bg-slate-950 border-slate-700 text-white placeholder-slate-500'
                       : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
-                  }`}
+                    }`}
                   placeholder="CODE"
                 />
               </div>
@@ -212,13 +211,12 @@ export default function LiveSessionPage() {
           {/* No Chords — vocalist mode */}
           <button
             onClick={() => setNoChords(prev => !prev)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-              noChords
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${noChords
                 ? 'bg-purple-500 text-white hover:bg-purple-600'
                 : isDarkMode
                   ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
+              }`}
             title={noChords ? 'Show chords' : 'Hide chords (vocalist mode)'}
           >
             <MicVocal className="w-4 h-4" />
@@ -226,11 +224,10 @@ export default function LiveSessionPage() {
           </button>
           <button
             onClick={() => setIsFollowing(!isFollowing)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-              isFollowing
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${isFollowing
                 ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' + (isDarkMode ? ' dark:bg-indigo-900/40 dark:text-indigo-400' : '')
                 : (isDarkMode ? 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white' : 'bg-slate-200 text-slate-500 hover:bg-slate-300 hover:text-slate-900')
-            }`}
+              }`}
             title={isFollowing ? "Disable Auto-Follow" : "Enable Auto-Follow"}
           >
             {isFollowing ? <Link className="w-4 h-4" /> : <Unlink className="w-4 h-4" />}
@@ -245,11 +242,10 @@ export default function LiveSessionPage() {
           </button>
           <button
             onClick={handleLeave}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-              isDarkMode 
-                ? 'bg-slate-800 hover:bg-slate-700 text-white' 
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${isDarkMode
+                ? 'bg-slate-800 hover:bg-slate-700 text-white'
                 : 'bg-slate-200 hover:bg-slate-300 text-slate-900'
-            }`}
+              }`}
           >
             Leave
           </button>
@@ -257,7 +253,7 @@ export default function LiveSessionPage() {
       </div>
 
       {/* Main Content Viewport */}
-      <div 
+      <div
         ref={scrollContainerRef}
         className={`flex-1 overflow-y-auto overflow-x-hidden ${isDarkMode ? 'bg-black' : 'bg-slate-200/70'}`}
         style={{ scrollBehavior: 'auto' }}
@@ -284,7 +280,7 @@ export default function LiveSessionPage() {
                     <div className={`flex-1 h-px ${isDarkMode ? 'bg-slate-800' : 'bg-slate-300'}`} />
                   </div>
                 )}
-                
+
                 <ContinuousSongView song={song} nashville={nashville} isDarkMode={isDarkMode} noChords={noChords} />
               </div>
             ))}
@@ -314,8 +310,15 @@ const ContinuousSongView: React.FC<{ song: SongData, nashville: boolean, isDarkM
       ChordExtension,
       SectionHeaderExtension
     ],
-    content: normalizeContent(song.content || {})
+    content: normalizeContent((song as any).editorContent || song.content || {})
   });
+
+  useEffect(() => {
+    if (editor && song.content) {
+      const norm = normalizeContent((song as any).editorContent || song.content);
+      editor.commands.setContent(norm);
+    }
+  }, [editor, song.content]);
 
   useEffect(() => {
     if (!editor) return;
@@ -342,14 +345,12 @@ const ContinuousSongView: React.FC<{ song: SongData, nashville: boolean, isDarkM
 
   return (
     <LiveViewerProvider nashville={nashville} songKey={localKey}>
-      <div className={`rounded-xl shadow-lg overflow-hidden ${
-        isDarkMode
+      <div className={`rounded-xl shadow-lg overflow-hidden ${isDarkMode
           ? 'bg-slate-950 border border-slate-800 text-white'
           : 'bg-white text-slate-900 border border-slate-200'
-      }`}>
-        <div className={`px-8 pt-6 pb-4 border-b flex items-center justify-between gap-4 ${
-          isDarkMode ? 'border-slate-800' : 'border-slate-100'
         }`}>
+        <div className={`px-8 pt-6 pb-4 border-b flex items-center justify-between gap-4 ${isDarkMode ? 'border-slate-800' : 'border-slate-100'
+          }`}>
           <div className="flex items-center gap-3 min-w-0">
             <Music className={`w-5 h-5 shrink-0 ${isDarkMode ? 'text-slate-600' : 'text-slate-400'}`} />
             <h2 className="text-2xl font-black tracking-tight truncate">
@@ -357,30 +358,26 @@ const ContinuousSongView: React.FC<{ song: SongData, nashville: boolean, isDarkM
             </h2>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <div className={`flex items-center rounded-lg overflow-hidden border ${
-              isDarkMode ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-slate-50'
-            }`}>
+            <div className={`flex items-center rounded-lg overflow-hidden border ${isDarkMode ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-slate-50'
+              }`}>
               <button
                 onClick={() => handleTranspose(-1)}
-                className={`px-3 py-1 font-bold transition-colors ${
-                  isDarkMode ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-200 text-slate-600'
-                }`}
+                className={`px-3 py-1 font-bold transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-200 text-slate-600'
+                  }`}
                 title="Transpose Down"
               >
                 -
               </button>
-              <span className={`px-3 py-1 text-sm font-bold border-x ${
-                isDarkMode
+              <span className={`px-3 py-1 text-sm font-bold border-x ${isDarkMode
                   ? 'border-slate-700 text-amber-400 bg-slate-950'
                   : 'border-slate-200 text-indigo-700 bg-white'
-              }`}>
+                }`}>
                 Key: {localKey}
               </span>
               <button
                 onClick={() => handleTranspose(1)}
-                className={`px-3 py-1 font-bold transition-colors ${
-                  isDarkMode ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-200 text-slate-600'
-                }`}
+                className={`px-3 py-1 font-bold transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-200 text-slate-600'
+                  }`}
                 title="Transpose Up"
               >
                 +
