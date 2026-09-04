@@ -79,7 +79,7 @@ export default async function Hero() {
       <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
 
       <div className="max-w-4xl relative z-10 space-y-stack-lg flex flex-col items-center">
-        {release.downloadCount > 0 && (
+        {release.downloadCount >= 100 && (
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/15 text-xs md:text-sm font-medium text-blue-200 backdrop-blur-md shadow-sm mb-1">
             <span className="flex h-2 w-2 relative">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
