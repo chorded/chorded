@@ -30,11 +30,19 @@ export async function GET() {
     }
 
     const releases = await res.json();
-    const latest = Array.isArray(releases) ? releases[0] : releases;
-
-    if (!latest) {
+    if (!Array.isArray(releases) || releases.length === 0) {
       throw new Error("No releases found");
     }
+
+    // Sort by published_at date descending to guarantee the newest published release is chosen
+    const published = releases.filter((r: { draft?: boolean }) => !r.draft);
+    published.sort(
+      (a: { published_at?: string }, b: { published_at?: string }) =>
+        new Date(b.published_at || 0).getTime() -
+        new Date(a.published_at || 0).getTime()
+    );
+
+    const latest = published[0] ?? releases[0];
 
     // Find the .exe installer asset (ignore .blockmap, .yml, etc.)
     const exeAsset = latest.assets?.find(

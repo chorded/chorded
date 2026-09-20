@@ -24,9 +24,19 @@ async function getLatestRelease(): Promise<LatestRelease> {
     if (!res.ok) throw new Error(`GitHub API ${res.status}`);
 
     const releases = await res.json();
-    const latest = Array.isArray(releases) ? releases[0] : releases;
+    if (!Array.isArray(releases) || releases.length === 0) {
+      throw new Error("No releases found");
+    }
 
-    if (!latest) throw new Error("No releases found");
+    // Sort by published_at date descending to guarantee the newest published release is chosen
+    const published = releases.filter((r: { draft?: boolean }) => !r.draft);
+    published.sort(
+      (a: { published_at?: string }, b: { published_at?: string }) =>
+        new Date(b.published_at || 0).getTime() -
+        new Date(a.published_at || 0).getTime()
+    );
+
+    const latest = published[0] ?? releases[0];
 
     const exeAsset = latest.assets?.find(
       (a: { name: string; browser_download_url: string }) =>
