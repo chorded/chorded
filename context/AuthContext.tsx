@@ -140,10 +140,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: new Error(verifyData.error || 'License key verification failed.') };
       }
 
+      const redirectUrl = typeof window !== 'undefined'
+        ? `${window.location.origin}/library`
+        : undefined;
+
       // Step 2: Sign in or create user via Supabase magic link (OTP)
       const { error: otpError } = await supabase.auth.signInWithOtp({
         email: email.trim().toLowerCase(),
         options: {
+          emailRedirectTo: redirectUrl,
           // Create the user if they don't exist yet
           shouldCreateUser: true,
           data: {
