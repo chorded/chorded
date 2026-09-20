@@ -5,6 +5,9 @@ export interface LibrarySong {
   id: string;
   user_id: string;
   title: string;
+  artist?: string | null;
+  slug?: string | null;
+  is_public?: boolean;
   original_key: string;
   current_key: string;
   bpm?: number | null;
@@ -15,46 +18,154 @@ export interface LibrarySong {
   is_starred: boolean;
   created_at: string;
   updated_at: string;
+  profiles?: {
+    display_name?: string | null;
+    email?: string | null;
+  } | null;
 }
 
 export interface LibrarySongLight {
   id: string;
+  user_id?: string;
   title: string;
+  artist?: string | null;
+  slug?: string | null;
+  is_public?: boolean;
   original_key: string;
   current_key: string;
   bpm?: number | null;
   time_signature?: string | null;
   is_starred: boolean;
   created_at: string;
+  profiles?: {
+    display_name?: string | null;
+    email?: string | null;
+  } | null;
+}
+
+export function slugify(text: string): string {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9 -]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
+
+export function getSongSlug(title: string, artist?: string): string {
+  const cleanTitle = slugify(title);
+  const cleanArtist = artist ? slugify(artist) : '';
+  if (cleanArtist) {
+    return `${cleanTitle}-${cleanArtist}-chords`;
+  }
+  return `${cleanTitle}-chords`;
+}
+
+export function getUploaderName(
+  song: Partial<LibrarySong>,
+  currentUserId?: string
+): string {
+  if (currentUserId && song.user_id && song.user_id === currentUserId) {
+    return 'You';
+  }
+  if (song.profiles?.display_name && song.profiles.display_name.trim()) {
+    return song.profiles.display_name.trim();
+  }
+  if (song.profiles?.email) {
+    return song.profiles.email.split('@')[0];
+  }
+  return 'CHORDED Community';
 }
 
 export async function fetchLibrarySongsLight(): Promise<LibrarySongLight[]> {
-  const { data, error } = await supabase
-    .from('library_songs')
-    .select('id, title, original_key, current_key, bpm, time_signature, is_starred, created_at')
-    .order('is_starred', { ascending: false })
-    .order('created_at', { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .from('library_songs')
+      .select('id, user_id, title, artist, slug, is_public, original_key, current_key, bpm, time_signature, is_starred, created_at, profiles:user_id(display_name, email)')
+      .order('is_starred', { ascending: false })
+      .order('created_at', { ascending: false });
 
-  if (error) {
-    console.error('Error fetching library songs (light):', error);
-    throw error;
+    if (error) {
+      // Fallback query if profiles relationship is unavailable
+      const { data: fallbackData, error: fallbackErr } = await supabase
+        .from('library_songs')
+        .select('id, user_id, title, original_key, current_key, bpm, time_signature, is_starred, created_at')
+        .order('is_starred', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      if (fallbackErr) throw fallbackErr;
+      return (fallbackData as LibrarySongLight[]) || [];
+    }
+
+    return (data as LibrarySongLight[]) || [];
+  } catch (err) {
+    console.error('Error fetching library songs (light):', err);
+    return [];
   }
-
-  return (data as LibrarySongLight[]) || [];
 }
 
 export async function fetchLibrarySongs(): Promise<LibrarySong[]> {
   const { data, error } = await supabase
     .from('library_songs')
-    .select('*')
+    .select('*, profiles:user_id(display_name, email)')
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching library songs:', error);
-    throw error;
+    // Fallback if profiles relation fails
+    const { data: fallbackData, error: fallbackErr } = await supabase
+      .from('library_songs')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (fallbackErr) {
+      console.error('Error fetching library songs:', fallbackErr);
+      throw fallbackErr;
+    }
+    return (fallbackData as LibrarySong[]) || [];
   }
 
   return (data as LibrarySong[]) || [];
+}
+
+export async function fetchPublicSongs(): Promise<LibrarySong[]> {
+  const { data, error } = await supabase
+    .from('library_songs')
+    .select('*, profiles:user_id(display_name, email)')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    // Fallback without profile join if schema differs
+    const { data: fallbackData } = await supabase
+      .from('library_songs')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    const songs = (fallbackData as LibrarySong[]) || [];
+    return songs.filter(s => s.is_public !== false);
+  }
+
+  // Filter for public songs
+  const songs = (data as LibrarySong[]) || [];
+  return songs.filter(s => s.is_public !== false);
+}
+
+export async function fetchPublicSongBySlug(artistSlug: string, songSlug: string): Promise<LibrarySong | null> {
+  const songs = await fetchPublicSongs();
+  if (!songs || songs.length === 0) return null;
+
+  const target = songs.find(s => {
+    const sArtist = slugify(s.artist || 'traditional');
+    const sTitle = slugify(s.title);
+    const cleanSongSlug = slugify(songSlug.replace(/-chords$/, ''));
+
+    if (s.slug && s.slug === songSlug) return true;
+    return sArtist === slugify(artistSlug) && sTitle === cleanSongSlug;
+  });
+
+  return target || songs[0] || null;
 }
 
 export async function uploadLibrarySongs(

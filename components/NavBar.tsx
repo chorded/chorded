@@ -16,6 +16,7 @@ const FALLBACK_URL =
 const SALE_END_DATE = new Date("2026-11-01T01:00:00");
 
 const navLinks = [
+  { label: "Chords", href: "/chords" },
   { label: "Features", href: "/#features" },
   { label: "Documentation", href: "/#video" },
   { label: "My Story", href: "/#story" },

@@ -12,6 +12,7 @@ import {
   deleteLibrarySong,
   downloadSongAsCrd,
   addSongToSetlist,
+  getUploaderName,
 } from '@/lib/library-service';
 import {
   fetchUserSetlists,
@@ -146,6 +147,12 @@ export default function LibraryPage() {
   // Handle Upload
   const handleFilesSelected = (files: File[]) => {
     if (files.length === 0) return;
+    const invalid = files.filter(f => !f.name.toLowerCase().endsWith('.crd'));
+    if (invalid.length > 0) {
+      setUploadError('Only .crd files are allowed for upload.');
+      setUploadFiles([]);
+      return;
+    }
     setUploadFiles(files);
     setUploadError(null);
   };
@@ -537,6 +544,9 @@ export default function LibraryPage() {
                             <FileText className="w-4 h-4 text-zinc-400 group-hover:text-blue-400 shrink-0 transition-colors" />
                             <span className="text-zinc-100 group-hover:text-blue-300 font-semibold transition-colors">
                               {song.title}
+                            </span>
+                            <span className="inline-flex items-center text-[10px] px-2 py-0.5 rounded bg-zinc-800/80 text-zinc-400 border border-zinc-700/50">
+                              By {getUploaderName(song, user?.id)}
                             </span>
                             {song.notes && (
                               <span className="text-xs text-zinc-500 truncate max-w-[200px] hidden lg:inline">
