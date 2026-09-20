@@ -32,10 +32,12 @@ export default function PublicChordsClient({ initialSongs }: PublicChordsClientP
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Load My Uploads when tab is clicked and user is logged in
+  // Load My Uploads when user is logged in
   useEffect(() => {
-    if (activeTab === 'my-uploads' && user) {
-      setLoadingMyUploads(true);
+    if (user) {
+      if (activeTab === 'my-uploads' && myUploadsList.length === 0) {
+        setLoadingMyUploads(true);
+      }
       fetchMyPublicSongs()
         .then(setMyUploadsList)
         .finally(() => setLoadingMyUploads(false));

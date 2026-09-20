@@ -217,8 +217,19 @@ export async function fetchMyPublicSongs(): Promise<PublicSong[]> {
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching my public songs:', error);
-    return [];
+    console.error('Error fetching my public songs with profiles join:', error);
+    // Fallback query without profile join
+    const { data: fallbackData, error: fallbackErr } = await supabase
+      .from('public_songs')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (fallbackErr) {
+      console.error('Error fetching my public songs (fallback):', fallbackErr);
+      return [];
+    }
+    return (fallbackData as PublicSong[]) || [];
   }
   return (data as PublicSong[]) || [];
 }

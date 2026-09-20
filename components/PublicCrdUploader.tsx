@@ -170,6 +170,32 @@ export default function PublicCrdUploader({ userId: propUserId, onSuccess, onClo
         }
       }
 
+      // If marked public, publish to public_songs table as well
+      if (isPublic && insertRes.data && currentUserId) {
+        try {
+          const publicPayload = {
+            user_id: currentUserId,
+            library_song_id: insertRes.data.id,
+            title: title.trim(),
+            artist: songArtist !== 'Traditional' ? songArtist : null,
+            slug,
+            original_key: key || songData.original_key || 'C',
+            current_key: key || songData.current_key || 'C',
+            bpm: bpm ? parseInt(bpm, 10) : songData.bpm || null,
+            time_signature: songData.time_signature || null,
+            content: songData.content || { type: 'doc', content: [] },
+            raw_text: selectedFile.content,
+            notes: songData.notes || '',
+          };
+          const { error: pubErr } = await supabase.from('public_songs').insert(publicPayload);
+          if (pubErr) {
+            console.error('Error inserting into public_songs table:', pubErr);
+          }
+        } catch (pubErr) {
+          console.error('Failed to publish to public_songs:', pubErr);
+        }
+      }
+
       setSuccessMsg(`Successfully uploaded "${title}"! Viewable at /chords/${slugify(songArtist)}/${slugify(title)}-chords`);
       setIsUploading(false);
 

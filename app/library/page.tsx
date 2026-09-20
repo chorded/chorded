@@ -219,6 +219,29 @@ export default function LibraryPage() {
     }
   };
 
+  // Single make public
+  const handlePublishSingleSong = async (song: LibrarySong, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setIsPublishing(true);
+    try {
+      const result = await publishSongs([song]);
+      setPublishedIds((prev) => {
+        const next = new Set(prev);
+        next.add(song.id);
+        return next;
+      });
+      if (result.skipped > 0) {
+        alert(`"${song.title}" is already in the public directory.`);
+      } else {
+        alert(`"${song.title}" published to public Songs directory!`);
+      }
+    } catch (err: any) {
+      alert(`Failed to publish song: ${err.message}`);
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
   // Batch download
   const handleBatchDownload = () => {
     const toDownload = songs.filter((s) => selectedIds.has(s.id));
@@ -783,11 +806,27 @@ export default function LibraryPage() {
                                   Public
                                 </span>
                               )}
-                              {song.notes && (
-                                <span className="text-xs text-zinc-500 truncate max-w-[200px] hidden lg:inline">
-                                  ({song.notes})
-                                </span>
-                              )}
+                              {(() => {
+                                if (!song.notes) return null;
+                                const artist = getSongArtist(song);
+                                const cleanNotes = song.notes.trim();
+                                const lowerNotes = cleanNotes.toLowerCase();
+                                const lowerArtist = artist.toLowerCase();
+                                const isArtistNote =
+                                  /^(?:artist|author|by)\s*:\s*/i.test(cleanNotes) ||
+                                  (artist && artist !== 'Traditional' && (
+                                    lowerNotes === lowerArtist ||
+                                    lowerNotes === `artist: ${lowerArtist}` ||
+                                    lowerNotes === `author: ${lowerArtist}` ||
+                                    lowerNotes === `by: ${lowerArtist}`
+                                  ));
+                                if (isArtistNote) return null;
+                                return (
+                                  <span className="text-xs text-zinc-500 truncate max-w-[200px] hidden lg:inline">
+                                    ({cleanNotes})
+                                  </span>
+                                );
+                              })()}
                             </div>
                             {(() => {
                               const artist = getSongArtist(song);
@@ -825,6 +864,20 @@ export default function LibraryPage() {
                               title="Preview Song Chart"
                             >
                               <Eye className="w-4 h-4" />
+                            </button>
+
+                            {/* Make Public */}
+                            <button
+                              onClick={(e) => handlePublishSingleSong(song, e)}
+                              disabled={isPublishing}
+                              className={`p-1.5 rounded-lg transition-colors ${
+                                publishedIds.has(song.id)
+                                  ? 'text-amber-400 hover:bg-amber-500/10'
+                                  : 'text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10'
+                              }`}
+                              title={publishedIds.has(song.id) ? 'Published to Public Directory' : 'Make Public'}
+                            >
+                              <Globe className="w-4 h-4" />
                             </button>
 
                             {/* Add to Setlist */}
@@ -1052,6 +1105,19 @@ export default function LibraryPage() {
               </button>
 
               <div className="flex items-center gap-3">
+                <button
+                  onClick={(e) => handlePublishSingleSong(previewSong, e)}
+                  disabled={isPublishing || publishedIds.has(previewSong.id)}
+                  className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border transition cursor-pointer ${
+                    publishedIds.has(previewSong.id)
+                      ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+                      : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/40 text-amber-300'
+                  }`}
+                >
+                  <Globe className="w-4 h-4" />
+                  {publishedIds.has(previewSong.id) ? 'Public' : 'Make Public'}
+                </button>
+
                 <button
                   onClick={(e) => {
                     const s = previewSong;
