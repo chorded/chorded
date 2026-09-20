@@ -40,6 +40,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
+import ChordChartView from '@/components/ChordChartView';
 
 type SortField = 'name' | 'date' | 'key' | 'star';
 type SortOrder = 'asc' | 'desc';
@@ -736,31 +737,27 @@ export default function LibraryPage() {
 
       {/* SONG PREVIEW MODAL */}
       {previewSong && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-          <div className="relative w-full max-w-2xl bg-[#0f1424] border border-white/15 rounded-2xl shadow-2xl text-white flex flex-col max-h-[90vh] overflow-hidden">
-            {/* Modal Header */}
-            <div className="p-6 border-b border-white/10 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
-                  <FileText className="w-5 h-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-fadeIn">
+          <div className="relative w-full max-w-5xl bg-[#0b0e1a] border border-white/15 rounded-2xl shadow-2xl text-white flex flex-col max-h-[94vh] overflow-hidden">
+            {/* Modal Top Header */}
+            <div className="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between gap-4 bg-[#0e1324]">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30 shrink-0">
+                  <Music className="w-5 h-5" />
                 </div>
-                <div>
-                  <h3 className="text-xl font-bold text-white">{previewSong.title}</h3>
-                  <div className="flex items-center gap-2 mt-1 text-xs text-zinc-400">
-                    <span className="bg-blue-600 text-white font-bold font-mono px-2 py-0.5 rounded text-[11px]">
-                      Key: {previewSong.current_key || previewSong.original_key || 'C'}
-                    </span>
-                    {previewSong.bpm && <span>• {previewSong.bpm} BPM</span>}
-                    {previewSong.time_signature && <span>• {previewSong.time_signature}</span>}
-                    <span>• Uploaded {formatDateUploaded(previewSong.created_at)}</span>
+                <div className="min-w-0">
+                  <h3 className="text-lg sm:text-xl font-extrabold text-white truncate">{previewSong.title}</h3>
+                  <div className="flex items-center gap-2 text-xs text-zinc-400 truncate">
+                    <span>Uploaded {formatDateUploaded(previewSong.created_at)}</span>
+                    <span>• Interactive Live Chord Chart</span>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   onClick={(e) => handleToggleStar(previewSong, e)}
-                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-amber-400"
+                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-amber-400 transition"
                   title={previewSong.is_starred ? 'Starred' : 'Star song'}
                 >
                   <Star
@@ -771,33 +768,32 @@ export default function LibraryPage() {
                 </button>
                 <button
                   onClick={() => setPreviewSong(null)}
-                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white"
+                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition"
+                  title="Close Preview"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            {/* Modal Body - Raw Lyrics/Chords Preview */}
-            <div className="p-6 overflow-y-auto flex-1 bg-[#090c17] text-zinc-300 font-mono text-xs whitespace-pre-wrap leading-relaxed select-text">
-              {previewSong.raw_text ? (
-                previewSong.raw_text
-              ) : previewSong.content ? (
-                <div className="text-zinc-400 italic">
-                  TipTap Document format loaded with structured chords and lyrics.
-                </div>
-              ) : (
-                <div className="text-zinc-500 italic">No chord lyrics content available.</div>
-              )}
+            {/* Modal Body - Interactive Live Chord Chart */}
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-[#060812]">
+              <ChordChartView
+                song={previewSong}
+                maxWidthClass="max-w-full"
+                onKeyChange={(newKey) => {
+                  setPreviewSong((prev) => (prev ? { ...prev, current_key: newKey } : null));
+                }}
+              />
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 bg-[#0d1222] border-t border-white/10 flex items-center justify-between gap-3">
+            <div className="p-4 bg-[#0e1324] border-t border-white/10 flex items-center justify-between gap-3 flex-wrap">
               <button
                 onClick={() => downloadSongAsCrd(previewSong)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-semibold border border-white/10 transition"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-semibold border border-white/10 transition cursor-pointer"
               >
-                <Download className="w-3.5 h-3.5" />
+                <Download className="w-4 h-4 text-zinc-400" />
                 Download .crd
               </button>
 
@@ -808,9 +804,9 @@ export default function LibraryPage() {
                     setPreviewSong(null);
                     openAddToSetlistModal(s, e);
                   }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-blue-600/25 transition"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-600/25 transition cursor-pointer"
                 >
-                  <ListPlus className="w-3.5 h-3.5" />
+                  <ListPlus className="w-4 h-4" />
                   Add to Setlist
                 </button>
               </div>
