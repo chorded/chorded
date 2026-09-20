@@ -1,7 +1,7 @@
 import React from 'react';
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { fetchPublicSongBySlug, slugify } from '@/lib/library-service';
+import { fetchPublicSongBySlug, slugify, getSongArtist } from '@/lib/library-service';
 import PublicSongDetailClient from './PublicSongDetailClient';
 
 interface PageProps {
@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     };
   }
 
-  const artistName = song.artist || 'Traditional';
+  const artistName = getSongArtist(song);
   const keyName = song.current_key || song.original_key || 'C';
 
   return {
@@ -46,7 +46,7 @@ export default async function PublicSongDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  const artistName = song.artist || 'Traditional';
+  const artistName = getSongArtist(song);
   const keyName = song.current_key || song.original_key || 'C';
 
   // Schema.org MusicComposition JSON-LD for Search Engines (Google SEO)

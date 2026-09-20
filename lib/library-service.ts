@@ -78,9 +78,33 @@ export function slugify(text: string): string {
     .replace(/-+/g, '-');
 }
 
-export function getSongSlug(title: string, artist?: string): string {
+export function getSongArtist(song?: Partial<LibrarySong | PublicSong | SetlistSong> | null): string {
+  if (!song) return 'Traditional';
+  if (song.artist && song.artist.trim()) {
+    return song.artist.trim();
+  }
+  if (song.raw_text) {
+    const chordProMatch = song.raw_text.match(/^\{(?:artist|a|author|by)\s*:\s*(.*?)\}$/m);
+    if (chordProMatch && chordProMatch[1].trim()) {
+      return chordProMatch[1].trim();
+    }
+    const headerMatch = song.raw_text.match(/^(?:artist|author|by)\s*:\s*(.+)$/im);
+    if (headerMatch && headerMatch[1].trim()) {
+      return headerMatch[1].trim();
+    }
+  }
+  if (song.notes) {
+    const notesMatch = song.notes.match(/^(?:artist|author|by)\s*:\s*(.+)$/im);
+    if (notesMatch && notesMatch[1].trim()) {
+      return notesMatch[1].trim();
+    }
+  }
+  return 'Traditional';
+}
+
+export function getSongSlug(title: string, artist?: string | null): string {
   const cleanTitle = slugify(title);
-  const cleanArtist = artist ? slugify(artist) : '';
+  const cleanArtist = artist && artist.trim() ? slugify(artist) : '';
   if (cleanArtist) {
     return `${cleanTitle}-${cleanArtist}-chords`;
   }
@@ -235,20 +259,24 @@ export async function publishSongs(songs: LibrarySong[]): Promise<{ published: n
 
   const toInsert = songs
     .filter(s => !alreadyPublished.has(s.id))
-    .map(s => ({
-      user_id: user.id,
-      library_song_id: s.id,
-      title: s.title,
-      artist: s.artist ?? null,
-      slug: getSongSlug(s.title, s.artist ?? undefined),
-      original_key: s.original_key,
-      current_key: s.current_key,
-      bpm: s.bpm ?? null,
-      time_signature: s.time_signature ?? null,
-      content: s.content,
-      raw_text: s.raw_text || '',
-      notes: s.notes || '',
-    }));
+    .map(s => {
+      const artistName = getSongArtist(s);
+      const effectiveArtist = artistName !== 'Traditional' ? artistName : (s.artist || null);
+      return {
+        user_id: user.id,
+        library_song_id: s.id,
+        title: s.title,
+        artist: effectiveArtist,
+        slug: getSongSlug(s.title, effectiveArtist),
+        original_key: s.original_key,
+        current_key: s.current_key,
+        bpm: s.bpm ?? null,
+        time_signature: s.time_signature ?? null,
+        content: s.content,
+        raw_text: s.raw_text || '',
+        notes: s.notes || '',
+      };
+    });
 
   if (toInsert.length === 0) {
     return { published: 0, skipped: alreadyPublished.size };
@@ -289,7 +317,8 @@ export async function fetchPublicSongBySlug(artistSlug: string, songSlug: string
   if (!songs || songs.length === 0) return null;
 
   const target = songs.find(s => {
-    const sArtist = slugify(s.artist || 'traditional');
+    const artistName = getSongArtist(s);
+    const sArtist = slugify(artistName);
     const sTitle = slugify(s.title);
     const cleanSongSlug = slugify(songSlug.replace(/-chords$/, ''));
 
@@ -318,6 +347,9 @@ export async function uploadLibrarySongs(
     const parsed = parseUploadedSetlistFile(file.content, file.name);
     for (const song of parsed.songs) {
       const title = song.title || file.name.replace(/\.[^/.]+$/, '');
+      const artistName = getSongArtist(song);
+      const effectiveArtist = artistName !== 'Traditional' ? artistName : (song.artist || null);
+      const slug = getSongSlug(title, effectiveArtist);
       const cleanKey = title.trim().toLowerCase();
       const originalKey = song.original_key || song.current_key || 'C';
       const currentKey = song.current_key || song.original_key || 'C';
@@ -335,6 +367,8 @@ export async function uploadLibrarySongs(
           .from('library_songs')
           .update({
             title,
+            artist: effectiveArtist,
+            slug,
             original_key: originalKey,
             current_key: currentKey,
             bpm,
@@ -358,6 +392,8 @@ export async function uploadLibrarySongs(
           .insert({
             user_id: userId,
             title,
+            artist: effectiveArtist,
+            slug,
             original_key: originalKey,
             current_key: currentKey,
             bpm,

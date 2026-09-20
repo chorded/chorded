@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { ArrowLeft, User as UserIcon } from 'lucide-react';
-import { PublicSong, getUploaderName } from '@/lib/library-service';
+import { PublicSong, getUploaderName, getSongArtist } from '@/lib/library-service';
 import ChordChartView from '@/components/ChordChartView';
 import { useAuth } from '@/context/AuthContext';
 
@@ -13,7 +13,7 @@ interface PublicSongDetailClientProps {
 
 export default function PublicSongDetailClient({ song }: PublicSongDetailClientProps) {
   const { user } = useAuth();
-  const artistName = song.artist || 'Traditional';
+  const artistName = getSongArtist(song);
   const uploaderName = getUploaderName(song, user?.id);
 
   return (

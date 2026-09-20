@@ -1,5 +1,6 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getSongSlug } from '@/lib/library-service';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -19,14 +20,24 @@ function parseCrdFile(content: string, fileName: string) {
     const rawContent = parsed.editorContent || parsed.content;
     const rawText = parsed.rawText || parsed.raw_text || '';
     const contentDoc = extractContent(rawContent);
+
+    let songArtist = parsed.artist || parsed.artistName || parsed.author || parsed.metadata?.artist || parsed.metadata?.artistName || parsed.metadata?.author || parsed.metadata?.by || null;
+    if (!songArtist && rawText) {
+      const match = rawText.match(/^\{(?:artist|a|author|by)\s*:\s*(.*?)\}$/m) || rawText.match(/^(?:artist|author|by)\s*:\s*(.+)$/im);
+      if (match && match[1].trim()) songArtist = match[1].trim();
+    }
+
     const songKey = parsed.key || parsed.originalKey || parsed.original_key || 'C';
     const currentKey = parsed.currentKey || parsed.current_key || songKey;
     const bpm = parsed.bpm ?? parsed.tempo ?? parsed.metadata?.tempo ?? null;
     const timeSignature = parsed.timeSignature ?? parsed.time_signature ?? parsed.metadata?.timeSignature ?? null;
     const notes = parsed.notes || (parsed.metadata?.author ? `Author: ${parsed.metadata.author}` : parsed.artist ? `Artist: ${parsed.artist}` : '');
-    return { title: songTitle, original_key: songKey, current_key: currentKey, bpm, time_signature: timeSignature, content: contentDoc, raw_text: rawText, notes };
+    return { title: songTitle, artist: songArtist, original_key: songKey, current_key: currentKey, bpm, time_signature: timeSignature, content: contentDoc, raw_text: rawText, notes };
   } catch {
-    return null;
+    // If text / ChordPro
+    const match = content.match(/^\{(?:artist|a|author|by)\s*:\s*(.*?)\}$/m) || content.match(/^(?:artist|author|by)\s*:\s*(.+)$/im);
+    const songArtist = match ? match[1].trim() : null;
+    return { title: defaultTitle, artist: songArtist, original_key: 'C', current_key: 'C', bpm: null, time_signature: null, content: { type: 'doc', content: [] }, raw_text: content, notes: '' };
   }
 }
 
@@ -61,12 +72,13 @@ export async function POST(req: NextRequest) {
     const song = parseCrdFile(file.content, file.name);
     if (!song) { failed++; errors.push(`Could not parse: ${file.name}`); continue; }
     const cleanKey = song.title.trim().toLowerCase();
+    const slug = getSongSlug(song.title, song.artist);
     const existingId = existingMap.get(cleanKey);
     if (existingId) {
-      const { error } = await supabase.from('library_songs').update({ title: song.title, original_key: song.original_key, current_key: song.current_key, bpm: song.bpm, time_signature: song.time_signature, content: song.content, raw_text: song.raw_text, notes: song.notes, updated_at: new Date().toISOString() }).eq('id', existingId);
+      const { error } = await supabase.from('library_songs').update({ title: song.title, artist: song.artist, slug, original_key: song.original_key, current_key: song.current_key, bpm: song.bpm, time_signature: song.time_signature, content: song.content, raw_text: song.raw_text, notes: song.notes, updated_at: new Date().toISOString() }).eq('id', existingId);
       if (error) { failed++; errors.push(`Update failed for "${song.title}": ${error.message}`); } else synced++;
     } else {
-      const { data: inserted, error } = await supabase.from('library_songs').insert({ user_id: user.id, title: song.title, original_key: song.original_key, current_key: song.current_key, bpm: song.bpm, time_signature: song.time_signature, content: song.content, raw_text: song.raw_text, notes: song.notes, is_starred: false }).select('id').single();
+      const { data: inserted, error } = await supabase.from('library_songs').insert({ user_id: user.id, title: song.title, artist: song.artist, slug, original_key: song.original_key, current_key: song.current_key, bpm: song.bpm, time_signature: song.time_signature, content: song.content, raw_text: song.raw_text, notes: song.notes, is_starred: false }).select('id').single();
       if (error) { failed++; errors.push(`Insert failed for "${song.title}": ${error.message}`); } else { synced++; if (inserted) existingMap.set(cleanKey, inserted.id); }
     }
   }

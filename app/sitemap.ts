@@ -1,5 +1,5 @@
 import { MetadataRoute } from 'next';
-import { fetchPublicSongs, slugify, getSongSlug } from '@/lib/library-service';
+import { fetchPublicSongs, slugify, getSongSlug, getSongArtist } from '@/lib/library-service';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = 'https://chorded.app';
@@ -29,8 +29,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   try {
     const songs = await fetchPublicSongs();
     const songRoutes: MetadataRoute.Sitemap = songs.map((song) => {
-      const artistSlug = slugify(song.artist || 'traditional');
-      const songSlug = getSongSlug(song.title, song.artist || undefined);
+      const artistName = getSongArtist(song);
+      const artistSlug = slugify(artistName);
+      const songSlug = getSongSlug(song.title, song.artist || artistName);
 
       return {
         url: `${baseUrl}/chords/${artistSlug}/${songSlug}`,

@@ -15,6 +15,7 @@ import {
   getUploaderName,
   publishSongs,
   fetchMyPublishedLibraryIds,
+  getSongArtist,
 } from '@/lib/library-service';
 import {
   fetchUserSetlists,
@@ -388,8 +389,10 @@ export default function LibraryPage() {
   const filteredAndSortedSongs = songs
     .filter((song) => {
       // Search filter
+      const songArtist = getSongArtist(song);
       const matchesSearch =
         song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (songArtist && songArtist.toLowerCase().includes(searchQuery.toLowerCase())) ||
         song.original_key.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (song.notes && song.notes.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (song.raw_text && song.raw_text.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -768,22 +771,32 @@ export default function LibraryPage() {
 
                         {/* NAME */}
                         <td className="py-3.5 px-4 font-medium">
-                          <div className="flex items-center gap-3">
-                            <FileText className="w-4 h-4 text-zinc-400 group-hover:text-blue-400 shrink-0 transition-colors" />
-                            <span className="text-zinc-100 group-hover:text-blue-300 font-semibold transition-colors">
-                              {song.title}
-                            </span>
-                            {publishedIds.has(song.id) && (
-                              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                                <Globe className="w-2.5 h-2.5" />
-                                Public
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-zinc-400 group-hover:text-blue-400 shrink-0 transition-colors" />
+                              <span className="text-zinc-100 group-hover:text-blue-300 font-semibold transition-colors">
+                                {song.title}
                               </span>
-                            )}
-                            {song.notes && (
-                              <span className="text-xs text-zinc-500 truncate max-w-[200px] hidden lg:inline">
-                                ({song.notes})
-                              </span>
-                            )}
+                              {publishedIds.has(song.id) && (
+                                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                  <Globe className="w-2.5 h-2.5" />
+                                  Public
+                                </span>
+                              )}
+                              {song.notes && (
+                                <span className="text-xs text-zinc-500 truncate max-w-[200px] hidden lg:inline">
+                                  ({song.notes})
+                                </span>
+                              )}
+                            </div>
+                            {(() => {
+                              const artist = getSongArtist(song);
+                              return artist && artist !== 'Traditional' ? (
+                                <span className="text-xs text-amber-400/90 font-medium ml-6">
+                                  {artist}
+                                </span>
+                              ) : null;
+                            })()}
                           </div>
                         </td>
 

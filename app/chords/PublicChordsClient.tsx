@@ -7,6 +7,7 @@ import {
   PublicSong,
   slugify,
   getSongSlug,
+  getSongArtist,
   getUploaderName,
   deletePublicSong,
   fetchMyPublicSongs,
@@ -97,9 +98,9 @@ export default function PublicChordsClient({ initialSongs }: PublicChordsClientP
   };
 
   const SongCard = ({ song, showDelete }: { song: PublicSong; showDelete?: boolean }) => {
-    const artistName = song.artist || 'Traditional';
+    const artistName = getSongArtist(song);
     const artistSlug = slugify(artistName);
-    const songSlug = getSongSlug(song.title, song.artist || undefined);
+    const songSlug = getSongSlug(song.title, song.artist || artistName);
     const href = `/chords/${artistSlug}/${songSlug}`;
     const uploaderName = getUploaderName(song, user?.id);
     const isDeleting = deletingId === song.id;

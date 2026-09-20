@@ -63,10 +63,10 @@ export default function PublicCrdUploader({ userId: propUserId, onSuccess, onClo
         setKey(firstSong.current_key || firstSong.original_key || 'C');
         if (firstSong.bpm) setBpm(firstSong.bpm.toString());
 
-        // Extract artist if in ChordPro directives {artist: ...} or headers
-        const artistMatch = text.match(/^\{(?:artist|a)\s*:\s*(.*?)\}$/m) || text.match(/^artist\s*:\s*(.+)$/im);
-        if (artistMatch) {
-          setArtist(artistMatch[1].trim());
+        // Extract artist from songData or ChordPro directives / text headers
+        const extractedArtist = firstSong.artist || (text.match(/^\{(?:artist|a|author|by)\s*:\s*(.*?)\}$/m) || text.match(/^(?:artist|author|by)\s*:\s*(.+)$/im))?.[1]?.trim();
+        if (extractedArtist) {
+          setArtist(extractedArtist);
         }
       } else {
         setTitle(file.name.replace(/\.crd$/i, ''));

@@ -5,6 +5,7 @@ export interface SetlistSong {
   setlist_id?: string;
   song_index: number;
   title: string;
+  artist?: string | null;
   original_key: string;
   current_key: string;
   bpm?: number | null;
@@ -208,6 +209,7 @@ import { buildContentFromLines } from '@/components/tiptap/ChordExtension';
 function parseRawCrdText(text: string, defaultTitle: string): Partial<SetlistSong> & { title: string } {
   const lines = text.split(/\r?\n/);
   let title = defaultTitle;
+  let artist: string | null = null;
   let key = 'C';
   let bpm: number | null = null;
   let timeSignature: string | null = null;
@@ -217,13 +219,15 @@ function parseRawCrdText(text: string, defaultTitle: string): Partial<SetlistSon
   for (const rawLine of lines) {
     const line = rawLine.trim();
 
-    // ChordPro directives: {title: Foo}, {t: Foo}, {key: G}, {k: G}, {tempo: 120}, {bpm: 120}, {time: 4/4}
+    // ChordPro directives: {title: Foo}, {t: Foo}, {artist: Bar}, {a: Bar}, {author: Bar}, {key: G}, {k: G}, {tempo: 120}, {bpm: 120}, {time: 4/4}
     const chordProMatch = line.match(/^\{([a-zA-Z]+)\s*:\s*(.*?)\}$/);
     if (chordProMatch) {
       const tag = chordProMatch[1].toLowerCase();
       const val = chordProMatch[2].trim();
       if (['title', 't'].includes(tag) && val) {
         title = val;
+      } else if (['artist', 'a', 'author', 'by'].includes(tag) && val) {
+        artist = val;
       } else if (['key', 'k'].includes(tag) && val) {
         key = val;
       } else if (['bpm', 'tempo'].includes(tag) && !isNaN(Number(val))) {
@@ -238,21 +242,24 @@ function parseRawCrdText(text: string, defaultTitle: string): Partial<SetlistSon
 
     // Common text headers at top of .crd files:
     // Title: Amazing Grace
+    // Artist: John Newton
     // Key: G
     // BPM: 120
-    const headerMatch = line.match(/^(title|key|bpm|tempo|time\s*signature|artist|notes?)\s*:\s*(.+)$/i);
+    const headerMatch = line.match(/^(title|key|bpm|tempo|time\s*signature|artist|author|by|notes?)\s*:\s*(.+)$/i);
     if (headerMatch && bodyLines.length === 0) {
       const headerName = headerMatch[1].toLowerCase();
       const headerVal = headerMatch[2].trim();
       if (headerName === 'title' && headerVal) {
         title = headerVal;
+      } else if ((headerName === 'artist' || headerName === 'author' || headerName === 'by') && headerVal) {
+        artist = headerVal;
       } else if (headerName === 'key' && headerVal) {
         key = headerVal;
       } else if ((headerName === 'bpm' || headerName === 'tempo') && !isNaN(Number(headerVal))) {
         bpm = Number(headerVal);
       } else if (headerName.includes('time') && headerVal) {
         timeSignature = headerVal;
-      } else if (headerName === 'artist' || headerName.startsWith('note')) {
+      } else if (headerName.startsWith('note')) {
         notes += (notes ? '\n' : '') + headerVal;
       }
       continue;
@@ -270,6 +277,7 @@ function parseRawCrdText(text: string, defaultTitle: string): Partial<SetlistSon
   return {
     song_index: 0,
     title,
+    artist,
     original_key: key,
     current_key: key,
     bpm,
@@ -353,9 +361,11 @@ export function parseUploadedSetlistFile(fileContent: string, fileName: string):
       const songs: Partial<SetlistSong>[] = parsed.songs.map((s: any, idx: number) => {
         const rawText = s.rawText || s.raw_text || '';
         const rawContent = s.editorContent || s.content;
+        const songArtist = s.artist || s.artistName || s.author || s.metadata?.artist || s.metadata?.artistName || s.metadata?.author || s.metadata?.by || null;
         return {
           song_index: s.songIndex ?? s.song_index ?? idx,
           title: s.title || `Song ${idx + 1}`,
+          artist: songArtist,
           original_key: s.key || s.originalKey || s.original_key || 'C',
           current_key: s.currentKey || s.current_key || s.key || s.originalKey || 'C',
           bpm: s.bpm ?? s.tempo ?? (s.metadata?.tempo ?? null),
@@ -374,9 +384,11 @@ export function parseUploadedSetlistFile(fileContent: string, fileName: string):
       const songs: Partial<SetlistSong>[] = parsed.map((s: any, idx: number) => {
         const rawText = s.rawText || s.raw_text || '';
         const rawContent = s.editorContent || s.content;
+        const songArtist = s.artist || s.artistName || s.author || s.metadata?.artist || s.metadata?.artistName || s.metadata?.author || s.metadata?.by || null;
         return {
           song_index: s.songIndex ?? s.song_index ?? idx,
           title: s.title || `Song ${idx + 1}`,
+          artist: songArtist,
           original_key: s.key || s.originalKey || s.original_key || 'C',
           current_key: s.currentKey || s.current_key || s.key || s.originalKey || 'C',
           bpm: s.bpm ?? s.tempo ?? (s.metadata?.tempo ?? null),
@@ -409,6 +421,14 @@ export function parseUploadedSetlistFile(fileContent: string, fileName: string):
       }
       const content = extractDocContent(rawContent, rawText);
 
+      let songArtist = parsed.artist || parsed.artistName || parsed.author || parsed.metadata?.artist || parsed.metadata?.artistName || parsed.metadata?.author || parsed.metadata?.by || null;
+      if (!songArtist && rawText) {
+        const match = rawText.match(/^\{(?:artist|a|author|by)\s*:\s*(.*?)\}$/m) || rawText.match(/^(?:artist|author|by)\s*:\s*(.+)$/im);
+        if (match && match[1].trim()) {
+          songArtist = match[1].trim();
+        }
+      }
+
       const songKey = parsed.key || parsed.originalKey || parsed.original_key || 'C';
       const currentKey = parsed.currentKey || parsed.current_key || songKey;
       const bpm = parsed.bpm ?? parsed.tempo ?? (parsed.metadata?.tempo ?? null);
@@ -421,6 +441,7 @@ export function parseUploadedSetlistFile(fileContent: string, fileName: string):
           {
             song_index: 0,
             title: songTitle,
+            artist: songArtist,
             original_key: songKey,
             current_key: currentKey,
             bpm,
