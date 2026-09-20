@@ -29,16 +29,14 @@ import {
   Plus,
   ListPlus,
   ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
   Loader2,
   AlertCircle,
   CheckCircle2,
   Eye,
   X,
   Music,
-  ExternalLink,
   Sparkles,
+  CheckSquare,
 } from 'lucide-react';
 import Link from 'next/link';
 import ChordChartView from '@/components/ChordChartView';
@@ -60,6 +58,9 @@ export default function LibraryPage() {
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
+  // Batch selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
   // Upload Modal State
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
@@ -71,8 +72,9 @@ export default function LibraryPage() {
   // Preview Modal State
   const [previewSong, setPreviewSong] = useState<LibrarySong | null>(null);
 
-  // Add to Setlist Modal State
+  // Add to Setlist Modal State (single & batch)
   const [addToSetlistSong, setAddToSetlistSong] = useState<LibrarySong | null>(null);
+  const [batchAddToSetlistSongs, setBatchAddToSetlistSongs] = useState<LibrarySong[] | null>(null);
   const [userSetlists, setUserSetlists] = useState<Setlist[]>([]);
   const [loadingSetlists, setLoadingSetlists] = useState(false);
   const [selectedSetlistId, setSelectedSetlistId] = useState<string>('');
@@ -136,11 +138,97 @@ export default function LibraryPage() {
     try {
       await deleteLibrarySong(song.id);
       setSongs((prev) => prev.filter((s) => s.id !== song.id));
+      setSelectedIds((prev) => { const n = new Set(prev); n.delete(song.id); return n; });
       if (previewSong?.id === song.id) {
         setPreviewSong(null);
       }
     } catch (err: any) {
       alert(`Failed to delete song: ${err.message}`);
+    }
+  };
+
+  // Batch selection helpers
+  const toggleSelectSong = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  // Batch delete
+  const handleBatchDelete = async () => {
+    const count = selectedIds.size;
+    if (!confirm(`Delete ${count} selected song${count > 1 ? 's' : ''} from your library? This cannot be undone.`)) return;
+    const ids = Array.from(selectedIds);
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await deleteLibrarySong(id);
+      } catch {
+        failed++;
+      }
+    }
+    // Remove successfully deleted songs
+    setSongs((prev) => prev.filter((s) => !ids.includes(s.id) || (failed > 0 && ids.indexOf(s.id) >= ids.length - failed)));
+    setSelectedIds(new Set());
+    if (failed > 0) alert(`${failed} song(s) could not be deleted.`);
+  };
+
+  // Batch download
+  const handleBatchDownload = () => {
+    const toDownload = songs.filter((s) => selectedIds.has(s.id));
+    toDownload.forEach((s) => downloadSongAsCrd(s));
+    clearSelection();
+  };
+
+  // Open batch add-to-setlist modal
+  const openBatchAddToSetlistModal = async () => {
+    const toAdd = songs.filter((s) => selectedIds.has(s.id));
+    setBatchAddToSetlistSongs(toAdd);
+    setSetlistSuccessMsg(null);
+    setIsCreatingNewSetlist(false);
+    setNewSetlistTitle('');
+    try {
+      setLoadingSetlists(true);
+      const lists = await fetchUserSetlists();
+      setUserSetlists(lists);
+      if (lists.length > 0) setSelectedSetlistId(lists[0].id);
+    } catch (err) {
+      console.error('Error fetching setlists:', err);
+    } finally {
+      setLoadingSetlists(false);
+    }
+  };
+
+  // Confirm batch add to setlist
+  const handleConfirmBatchAddToSetlist = async () => {
+    if (!user || !batchAddToSetlistSongs) return;
+    try {
+      setAddingToSetlist(true);
+      let targetSetlistId = selectedSetlistId;
+      if (isCreatingNewSetlist) {
+        if (!newSetlistTitle.trim()) { alert('Please enter a setlist name.'); return; }
+        const created = await createSetlist(user.id, newSetlistTitle.trim());
+        targetSetlistId = created.id;
+      }
+      if (!targetSetlistId) { alert('Please select or create a setlist.'); return; }
+      for (const song of batchAddToSetlistSongs) {
+        await addSongToSetlist(targetSetlistId, song);
+      }
+      setSetlistSuccessMsg(`${batchAddToSetlistSongs.length} song${batchAddToSetlistSongs.length > 1 ? 's' : ''} added to setlist!`);
+      setTimeout(() => {
+        setBatchAddToSetlistSongs(null);
+        setSetlistSuccessMsg(null);
+        clearSelection();
+      }, 1400);
+    } catch (err: any) {
+      alert(`Failed to add songs to setlist: ${err.message}`);
+    } finally {
+      setAddingToSetlist(false);
     }
   };
 
@@ -193,6 +281,7 @@ export default function LibraryPage() {
   const openAddToSetlistModal = async (song: LibrarySong, e: React.MouseEvent) => {
     e.stopPropagation();
     setAddToSetlistSong(song);
+    setBatchAddToSetlistSongs(null);
     setSetlistSuccessMsg(null);
     setIsCreatingNewSetlist(false);
     setNewSetlistTitle('');
@@ -244,6 +333,7 @@ export default function LibraryPage() {
     }
   };
 
+  // NOTE: filteredAndSortedSongs is defined below the sort helper
   // Sorting helper
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -300,6 +390,19 @@ export default function LibraryPage() {
       }
       return 0;
     });
+
+  // Derived selection state (must be after filteredAndSortedSongs is defined)
+  const allVisibleSelected =
+    filteredAndSortedSongs.length > 0 &&
+    filteredAndSortedSongs.every((s) => selectedIds.has(s.id));
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredAndSortedSongs.map((s) => s.id)));
+    }
+  };
 
   // Date Formatter: "Sep 4, 2026, 10:55 AM"
   const formatDateUploaded = (dateStr: string) => {
@@ -464,6 +567,45 @@ export default function LibraryPage() {
           </div>
         )}
 
+        {/* Batch Action Toolbar */}
+        {selectedIds.size > 0 && (
+          <div className="mt-4 flex items-center gap-3 px-4 py-3 bg-blue-600/10 border border-blue-500/30 rounded-xl backdrop-blur-sm">
+            <div className="flex items-center gap-2 text-sm font-semibold text-blue-300">
+              <CheckSquare className="w-4 h-4" />
+              <span>{selectedIds.size} selected</span>
+            </div>
+            <div className="flex-1" />
+            <button
+              onClick={openBatchAddToSetlistModal}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 text-xs font-semibold border border-emerald-500/30 transition cursor-pointer"
+            >
+              <ListPlus className="w-3.5 h-3.5" />
+              Add to Setlist
+            </button>
+            <button
+              onClick={handleBatchDownload}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 text-xs font-semibold border border-white/10 transition cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download All
+            </button>
+            <button
+              onClick={handleBatchDelete}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-semibold border border-red-500/30 transition cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
+            </button>
+            <button
+              onClick={clearSelection}
+              className="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-white/10 transition cursor-pointer"
+              title="Clear selection"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* Table View Matching Desktop App Screenshot */}
         {!loadingSongs && filteredAndSortedSongs.length > 0 && (
           <div className="mt-6 border border-[#1b233a] rounded-xl bg-[#0b101e] overflow-hidden shadow-2xl">
@@ -472,6 +614,19 @@ export default function LibraryPage() {
                 {/* Table Header */}
                 <thead>
                   <tr className="border-b border-[#1b233a] bg-[#0d1428] text-[11px] font-bold text-zinc-400 uppercase tracking-wider select-none">
+                    {/* Select All Checkbox */}
+                    <th className="py-3.5 pl-4 pr-2 w-10">
+                      <button
+                        onClick={toggleSelectAll}
+                        className="flex items-center justify-center w-4 h-4 rounded border border-zinc-600 hover:border-blue-400 transition cursor-pointer"
+                        title={allVisibleSelected ? 'Deselect all' : 'Select all'}
+                      >
+                        {allVisibleSelected && <div className="w-2.5 h-2.5 rounded-sm bg-blue-500" />}
+                        {!allVisibleSelected && selectedIds.size > 0 && filteredAndSortedSongs.some(s => selectedIds.has(s.id)) && (
+                          <div className="w-2.5 h-0.5 rounded bg-blue-400" />
+                        )}
+                      </button>
+                    </th>
                     <th
                       className="py-3.5 px-4 w-14 text-center cursor-pointer hover:text-white"
                       onClick={() => handleSort('star')}
@@ -515,12 +670,36 @@ export default function LibraryPage() {
                 <tbody className="divide-y divide-[#151c31] text-sm">
                   {filteredAndSortedSongs.map((song) => {
                     const songKey = song.current_key || song.original_key || 'C';
+                    const isSelected = selectedIds.has(song.id);
                     return (
                       <tr
                         key={song.id}
                         onClick={() => setPreviewSong(song)}
-                        className="group hover:bg-[#12192e] transition-colors cursor-pointer"
+                        className={`group transition-colors cursor-pointer ${
+                          isSelected
+                            ? 'bg-blue-600/8 hover:bg-blue-600/12'
+                            : 'hover:bg-[#12192e]'
+                        }`}
                       >
+                        {/* CHECKBOX */}
+                        <td className="py-3.5 pl-4 pr-2 text-center">
+                          <button
+                            onClick={(e) => toggleSelectSong(song.id, e)}
+                            className={`flex items-center justify-center w-4 h-4 rounded border transition-colors cursor-pointer ${
+                              isSelected
+                                ? 'border-blue-500 bg-blue-600'
+                                : 'border-zinc-600 hover:border-blue-400 bg-transparent'
+                            }`}
+                            title={isSelected ? 'Deselect' : 'Select'}
+                          >
+                            {isSelected && (
+                              <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 10" fill="none">
+                                <path d="M1.5 5L4 7.5L8.5 2.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            )}
+                          </button>
+                        </td>
+
                         {/* STAR */}
                         <td className="py-3.5 px-4 text-center">
                           <button
@@ -825,14 +1004,31 @@ export default function LibraryPage() {
         </div>
       )}
 
-      {/* ADD TO SETLIST MODAL */}
-      {addToSetlistSong && (
+      {/* ADD TO SETLIST MODAL (single or batch) */}
+      {(addToSetlistSong || batchAddToSetlistSongs) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-md bg-[#111626] border border-white/15 rounded-2xl p-6 shadow-2xl text-white">
             <h3 className="text-lg font-bold text-white mb-1">Add to Setlist</h3>
             <p className="text-xs text-zinc-400 mb-4">
-              Add <span className="text-blue-400 font-semibold">"{addToSetlistSong.title}"</span> to an existing or new cloud setlist.
+              {batchAddToSetlistSongs ? (
+                <>Add <span className="text-blue-400 font-semibold">{batchAddToSetlistSongs.length} songs</span> to an existing or new cloud setlist.</>
+              ) : (
+                <>Add <span className="text-blue-400 font-semibold">"{addToSetlistSong!.title}"</span> to an existing or new cloud setlist.</>
+              )}
             </p>
+
+            {/* Song list preview for batch */}
+            {batchAddToSetlistSongs && batchAddToSetlistSongs.length > 0 && (
+              <div className="mb-4 max-h-28 overflow-y-auto space-y-1">
+                {batchAddToSetlistSongs.map((s) => (
+                  <div key={s.id} className="flex items-center gap-2 text-xs text-zinc-300 py-1 px-2.5 rounded-lg bg-white/5">
+                    <FileText className="w-3 h-3 text-blue-400 shrink-0" />
+                    <span className="truncate">{s.title}</span>
+                    <span className="ml-auto text-zinc-500 font-mono">{s.current_key || s.original_key}</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {setlistSuccessMsg ? (
               <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center gap-2 text-emerald-400 text-sm font-semibold">
@@ -906,19 +1102,19 @@ export default function LibraryPage() {
                 <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
                   <button
                     type="button"
-                    onClick={() => setAddToSetlistSong(null)}
+                    onClick={() => { setAddToSetlistSong(null); setBatchAddToSetlistSongs(null); }}
                     className="px-4 py-2 text-sm text-zinc-400 hover:text-white rounded-xl hover:bg-white/5 transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
-                    onClick={handleConfirmAddToSetlist}
+                    onClick={batchAddToSetlistSongs ? handleConfirmBatchAddToSetlist : handleConfirmAddToSetlist}
                     disabled={addingToSetlist || (isCreatingNewSetlist && !newSetlistTitle.trim())}
                     className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition duration-200 flex items-center gap-2 shadow-lg shadow-blue-600/25 cursor-pointer"
                   >
                     {addingToSetlist && <Loader2 className="w-4 h-4 animate-spin" />}
-                    Add Song
+                    {batchAddToSetlistSongs ? `Add ${batchAddToSetlistSongs.length} Songs` : 'Add Song'}
                   </button>
                 </div>
               </div>
