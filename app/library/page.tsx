@@ -104,7 +104,10 @@ export default function LibraryPage() {
         loadSongs();
       }
     }
-  }, [user, authLoading]);
+  // Use user?.id (stable string) instead of user object to avoid re-fetching
+  // on every token refresh, which would restore deleted songs.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, authLoading]);
 
   // Handle Star Toggle
   const handleToggleStar = async (song: LibrarySong, e: React.MouseEvent) => {
