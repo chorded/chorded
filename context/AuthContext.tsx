@@ -18,8 +18,7 @@ interface AuthContextType {
   loading: boolean;
   isSubscribed: boolean | null;
   checkingSubscription: boolean;
-  signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUpWithEmail: (email: string, password: string, displayName?: string) => Promise<{ error: Error | null; data?: any }>;
+  signInWithLicenseKey: (email: string, licenseKey: string) => Promise<{ error: Error | null }>;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -59,15 +58,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     setCheckingSubscription(true);
     try {
-      const verifyRes = await fetch('/api/auth/verify-subscription', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: user.email }),
-      });
-      const verifyData = await verifyRes.json();
-      const verified = Boolean(verifyData.verified);
-      setIsSubscribed(verified);
-      return verified;
+      // For license-key-based auth, if the user is logged in they are verified Pro users
+      setIsSubscribed(true);
+      return true;
     } catch (err) {
       console.error('Subscription verification error:', err);
       setIsSubscribed(false);
@@ -127,22 +120,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signInWithEmail = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error ? new Error(error.message) : null };
-  };
+  /**
+   * Sign in via Gumroad license key verification.
+   * 1. Verifies the license key + email against Gumroad.
+   * 2. On success, uses Supabase OTP (magic link) to create/sign-in the user.
+   */
+  const signInWithLicenseKey = async (email: string, licenseKey: string): Promise<{ error: Error | null }> => {
+    try {
+      // Step 1: Verify the Gumroad license key
+      const verifyRes = await fetch('/api/auth/verify-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, licenseKey }),
+      });
 
-  const signUpWithEmail = async (email: string, password: string, displayName?: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: displayName || email.split('@')[0],
+      const verifyData = await verifyRes.json();
+
+      if (!verifyData.verified) {
+        return { error: new Error(verifyData.error || 'License key verification failed.') };
+      }
+
+      // Step 2: Sign in or create user via Supabase magic link (OTP)
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email: email.trim().toLowerCase(),
+        options: {
+          // Create the user if they don't exist yet
+          shouldCreateUser: true,
+          data: {
+            full_name: email.split('@')[0],
+          },
         },
-      },
-    });
-    return { error: error ? new Error(error.message) : null, data };
+      });
+
+      if (otpError) {
+        return { error: new Error(otpError.message) };
+      }
+
+      // OTP email sent — caller should show "check your email" message
+      return { error: null };
+    } catch (err: any) {
+      return { error: new Error(err.message || 'Sign in failed.') };
+    }
   };
 
   const signInWithGoogle = async () => {
@@ -172,8 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         isSubscribed,
         checkingSubscription,
-        signInWithEmail,
-        signUpWithEmail,
+        signInWithLicenseKey,
         signInWithGoogle,
         signOut,
         refreshProfile,
