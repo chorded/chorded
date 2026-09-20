@@ -484,6 +484,22 @@ export default function LibraryPage() {
               Organize and manage your Chorded <code className="text-blue-400">.crd</code> song charts. Star favorites, add to setlists, and publish to the community.
             </p>
           </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={() => {
+                if (!user) {
+                  setIsAuthModalOpen(true);
+                } else {
+                  setIsUploadModalOpen(true);
+                }
+              }}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded-xl transition-all shadow-lg shadow-blue-600/25 hover:shadow-blue-500/35 cursor-pointer active:scale-95"
+            >
+              <Upload className="w-4 h-4" />
+              Upload .crd
+            </button>
+          </div>
         </div>
 
         {/* Filter and Search Bar */}
@@ -577,8 +593,17 @@ export default function LibraryPage() {
             <p className="text-zinc-400 text-sm mb-6 max-w-md mx-auto">
               {searchQuery || selectedKeyFilter !== 'ALL' || onlyStarred
                 ? 'Try adjusting your filters or search keywords.'
-                : 'Upload .crd files from the Chorded desktop app to get started.'}
+                : 'Upload .crd files from your computer or desktop app to get started.'}
             </p>
+            {!searchQuery && selectedKeyFilter === 'ALL' && !onlyStarred && (
+              <button
+                onClick={() => setIsUploadModalOpen(true)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded-xl transition duration-200 shadow-lg shadow-blue-600/20 cursor-pointer active:scale-95"
+              >
+                <Upload className="w-4 h-4" />
+                Upload .crd File
+              </button>
+            )}
           </div>
         )}
 

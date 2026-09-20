@@ -26,7 +26,6 @@ export default async function PublicChordsPage() {
       <section className="relative border-b border-slate-800 bg-gradient-to-b from-slate-900/80 to-slate-950 px-6 py-16 text-center">
         <div className="max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold uppercase tracking-wider mb-4">
-            <Sparkles className="w-3.5 h-3.5" />
             Public Song Directory
           </div>
           <h1 className="text-4xl sm:text-5xl font-extrabold text-white tracking-tight mb-4">
