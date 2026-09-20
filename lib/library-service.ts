@@ -283,14 +283,25 @@ export async function toggleStarSong(songId: string, isStarred: boolean): Promis
 }
 
 export async function deleteLibrarySong(songId: string): Promise<void> {
-  const { error } = await supabase
+  // Get the current user to scope the delete to their own songs
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const { error, count } = await supabase
     .from('library_songs')
-    .delete()
-    .eq('id', songId);
+    .delete({ count: 'exact' })
+    .eq('id', songId)
+    .eq('user_id', user.id);
 
   if (error) {
     console.error('Error deleting library song:', error);
     throw error;
+  }
+
+  // If count is 0, the row either didn't exist or RLS blocked the delete
+  if (count === 0) {
+    console.warn('Delete returned 0 rows — RLS may be blocking deletes or the song does not belong to this user.');
+    throw new Error('Could not delete song. You may not have permission to delete this item.');
   }
 }
 
