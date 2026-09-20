@@ -43,6 +43,29 @@ export interface LibrarySongLight {
   } | null;
 }
 
+/** A song that has been published to the public Songs directory (public_songs table). */
+export interface PublicSong {
+  id: string;
+  user_id: string;
+  library_song_id?: string | null;
+  title: string;
+  artist?: string | null;
+  slug?: string | null;
+  original_key: string;
+  current_key: string;
+  bpm?: number | null;
+  time_signature?: string | null;
+  content: any;
+  raw_text?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  profiles?: {
+    display_name?: string | null;
+    email?: string | null;
+  } | null;
+}
+
 export function slugify(text: string): string {
   return text
     .toString()
@@ -65,7 +88,7 @@ export function getSongSlug(title: string, artist?: string): string {
 }
 
 export function getUploaderName(
-  song: Partial<LibrarySong>,
+  song: Partial<LibrarySong | PublicSong>,
   currentUserId?: string
 ): string {
   if (currentUserId && song.user_id && song.user_id === currentUserId) {
@@ -130,29 +153,138 @@ export async function fetchLibrarySongs(): Promise<LibrarySong[]> {
   return (data as LibrarySong[]) || [];
 }
 
-export async function fetchPublicSongs(): Promise<LibrarySong[]> {
+// ---------------------------------------------------------------------------
+// PUBLIC SONGS (public_songs table — separate from library_songs)
+// ---------------------------------------------------------------------------
+
+/** Fetch all publicly published songs (visible to everyone). */
+export async function fetchPublicSongs(): Promise<PublicSong[]> {
   const { data, error } = await supabase
-    .from('library_songs')
+    .from('public_songs')
     .select('*, profiles:user_id(display_name, email)')
     .order('created_at', { ascending: false });
 
   if (error) {
-    // Fallback without profile join if schema differs
-    const { data: fallbackData } = await supabase
-      .from('library_songs')
+    // Fallback without profile join
+    const { data: fallbackData, error: fallbackErr } = await supabase
+      .from('public_songs')
       .select('*')
       .order('created_at', { ascending: false });
 
-    const songs = (fallbackData as LibrarySong[]) || [];
-    return songs.filter(s => s.is_public !== false);
+    if (fallbackErr) {
+      console.error('Error fetching public songs:', fallbackErr);
+      return [];
+    }
+    return (fallbackData as PublicSong[]) || [];
   }
 
-  // Filter for public songs
-  const songs = (data as LibrarySong[]) || [];
-  return songs.filter(s => s.is_public !== false);
+  return (data as PublicSong[]) || [];
 }
 
-export async function fetchPublicSongBySlug(artistSlug: string, songSlug: string): Promise<LibrarySong | null> {
+/** Fetch only the current user's published songs (for "My Uploads" tab). */
+export async function fetchMyPublicSongs(): Promise<PublicSong[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data, error } = await supabase
+    .from('public_songs')
+    .select('*, profiles:user_id(display_name, email)')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching my public songs:', error);
+    return [];
+  }
+  return (data as PublicSong[]) || [];
+}
+
+/** Fetch the set of library_song_ids the current user has already published. */
+export async function fetchMyPublishedLibraryIds(): Promise<Set<string>> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return new Set();
+
+  const { data, error } = await supabase
+    .from('public_songs')
+    .select('library_song_id')
+    .eq('user_id', user.id)
+    .not('library_song_id', 'is', null);
+
+  if (error || !data) return new Set();
+  return new Set(data.map((r: any) => r.library_song_id as string).filter(Boolean));
+}
+
+/**
+ * Publish a batch of library songs to the public Songs directory.
+ * Skips songs that are already published (matched by library_song_id).
+ */
+export async function publishSongs(songs: LibrarySong[]): Promise<{ published: number; skipped: number }> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  // Check which are already published
+  const { data: existing } = await supabase
+    .from('public_songs')
+    .select('library_song_id')
+    .eq('user_id', user.id)
+    .in('library_song_id', songs.map(s => s.id));
+
+  const alreadyPublished = new Set(
+    (existing || []).map((r: any) => r.library_song_id as string)
+  );
+
+  const toInsert = songs
+    .filter(s => !alreadyPublished.has(s.id))
+    .map(s => ({
+      user_id: user.id,
+      library_song_id: s.id,
+      title: s.title,
+      artist: s.artist ?? null,
+      slug: getSongSlug(s.title, s.artist ?? undefined),
+      original_key: s.original_key,
+      current_key: s.current_key,
+      bpm: s.bpm ?? null,
+      time_signature: s.time_signature ?? null,
+      content: s.content,
+      raw_text: s.raw_text || '',
+      notes: s.notes || '',
+    }));
+
+  if (toInsert.length === 0) {
+    return { published: 0, skipped: alreadyPublished.size };
+  }
+
+  const { error } = await supabase.from('public_songs').insert(toInsert);
+  if (error) {
+    console.error('Error publishing songs:', error);
+    throw error;
+  }
+
+  return { published: toInsert.length, skipped: alreadyPublished.size };
+}
+
+/** Remove a song from the public Songs directory (does NOT touch library_songs). */
+export async function deletePublicSong(publicSongId: string): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const { error, count } = await supabase
+    .from('public_songs')
+    .delete({ count: 'exact' })
+    .eq('id', publicSongId)
+    .eq('user_id', user.id);
+
+  if (error) {
+    console.error('Error deleting public song:', error);
+    throw error;
+  }
+
+  if (count === 0) {
+    throw new Error('Could not delete song. You may not have permission.');
+  }
+}
+
+export async function fetchPublicSongBySlug(artistSlug: string, songSlug: string): Promise<PublicSong | null> {
   const songs = await fetchPublicSongs();
   if (!songs || songs.length === 0) return null;
 

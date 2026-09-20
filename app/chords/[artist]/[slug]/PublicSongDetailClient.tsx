@@ -2,35 +2,19 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { ArrowLeft, User as UserIcon, Trash2 } from 'lucide-react';
-import { LibrarySong, getUploaderName, deleteLibrarySong } from '@/lib/library-service';
+import { ArrowLeft, User as UserIcon } from 'lucide-react';
+import { PublicSong, getUploaderName } from '@/lib/library-service';
 import ChordChartView from '@/components/ChordChartView';
 import { useAuth } from '@/context/AuthContext';
 
 interface PublicSongDetailClientProps {
-  song: LibrarySong;
+  song: PublicSong;
 }
 
 export default function PublicSongDetailClient({ song }: PublicSongDetailClientProps) {
-  const router = useRouter();
   const { user } = useAuth();
   const artistName = song.artist || 'Traditional';
   const uploaderName = getUploaderName(song, user?.id);
-  const isOwner = user && song.user_id === user.id;
-
-  const handleDelete = async () => {
-    if (!confirm(`Are you sure you want to remove your upload "${song.title}"? This cannot be undone.`)) {
-      return;
-    }
-
-    try {
-      await deleteLibrarySong(song.id);
-      router.push('/chords');
-    } catch (err: any) {
-      alert(`Failed to delete song: ${err.message}`);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-amber-500/30">
@@ -45,15 +29,6 @@ export default function PublicSongDetailClient({ song }: PublicSongDetailClientP
         </Link>
 
         <div className="flex items-center gap-2">
-          {isOwner && (
-            <button
-              onClick={handleDelete}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 px-3 py-1.5 rounded-xl transition"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              Remove Upload
-            </button>
-          )}
           <span className="hidden sm:inline text-xs font-semibold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-md border border-amber-500/20">
             Public .crd Chart
           </span>

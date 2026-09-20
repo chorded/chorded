@@ -1,13 +1,13 @@
 import React from 'react';
 import Link from 'next/link';
 import { Metadata } from 'next';
-import { Music, Search, Upload, Sparkles, Key, FileText, ChevronRight } from 'lucide-react';
-import { fetchPublicSongs, slugify, getSongSlug } from '@/lib/library-service';
+import { Sparkles } from 'lucide-react';
+import { fetchPublicSongs } from '@/lib/library-service';
 import PublicChordsClient from './PublicChordsClient';
 
 export const metadata: Metadata = {
   title: 'Guitar Chords & Lyrics Directory | CHORDED',
-  description: 'Search thousands of accurate guitar chord charts, transpose keys instantly, use Nashville numbers, and upload your own .crd song files.',
+  description: 'Search guitar chord charts from the CHORDED community. Transpose keys instantly, use Nashville numbers, and stream live chord charts.',
   openGraph: {
     title: 'Guitar Chords & Lyrics Directory | CHORDED',
     description: 'Accurate guitar chord charts with live key transposition and auto-scroll.',
@@ -33,7 +33,7 @@ export default async function PublicChordsPage() {
             Find & Play <span className="bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 bg-clip-text text-transparent">Guitar Chords</span>
           </h1>
           <p className="text-slate-400 text-base sm:text-lg max-w-2xl mx-auto mb-8">
-            Browse accurate chord charts, transpose keys with one click, or upload your own <code className="bg-slate-800 px-1.5 py-0.5 rounded text-amber-300 font-mono text-sm">.crd</code> files.
+            Browse accurate chord charts from the CHORDED community. Transpose keys with one click, or publish your own from your Library.
           </p>
 
           <PublicChordsClient initialSongs={songs} />

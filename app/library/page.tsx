@@ -13,6 +13,8 @@ import {
   downloadSongAsCrd,
   addSongToSetlist,
   getUploaderName,
+  publishSongs,
+  fetchMyPublishedLibraryIds,
 } from '@/lib/library-service';
 import {
   fetchUserSetlists,
@@ -37,6 +39,7 @@ import {
   Music,
   Sparkles,
   CheckSquare,
+  Globe,
 } from 'lucide-react';
 import Link from 'next/link';
 import ChordChartView from '@/components/ChordChartView';
@@ -83,12 +86,20 @@ export default function LibraryPage() {
   const [addingToSetlist, setAddingToSetlist] = useState(false);
   const [setlistSuccessMsg, setSetlistSuccessMsg] = useState<string | null>(null);
 
+  // Published IDs — library song IDs that have already been made public
+  const [publishedIds, setPublishedIds] = useState<Set<string>>(new Set());
+  const [isPublishing, setIsPublishing] = useState(false);
+
   const loadSongs = async () => {
     if (!user) return;
     try {
       setLoadingSongs(true);
-      const data = await fetchLibrarySongs();
+      const [data, pubIds] = await Promise.all([
+        fetchLibrarySongs(),
+        fetchMyPublishedLibraryIds(),
+      ]);
       setSongs(data);
+      setPublishedIds(pubIds);
     } catch (err) {
       console.error('Failed to load library songs:', err);
     } finally {
@@ -179,6 +190,32 @@ export default function LibraryPage() {
     setSongs((prev) => prev.filter((s) => !ids.includes(s.id) || (failed > 0 && ids.indexOf(s.id) >= ids.length - failed)));
     setSelectedIds(new Set());
     if (failed > 0) alert(`${failed} song(s) could not be deleted.`);
+  };
+
+  // Batch make public
+  const handleBatchPublish = async () => {
+    const toPublish = songs.filter((s) => selectedIds.has(s.id));
+    if (toPublish.length === 0) return;
+
+    setIsPublishing(true);
+    try {
+      const result = await publishSongs(toPublish);
+      // Update published IDs set
+      setPublishedIds((prev) => {
+        const next = new Set(prev);
+        toPublish.forEach((s) => next.add(s.id));
+        return next;
+      });
+      clearSelection();
+      const msg = result.skipped > 0
+        ? `${result.published} song${result.published !== 1 ? 's' : ''} published! (${result.skipped} already public)`
+        : `${result.published} song${result.published !== 1 ? 's' : ''} published to the Songs directory!`;
+      alert(msg);
+    } catch (err: any) {
+      alert(`Failed to publish: ${err.message}`);
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   // Batch download
@@ -444,22 +481,8 @@ export default function LibraryPage() {
               </span>
             </div>
             <p className="mt-1.5 text-zinc-400 text-sm">
-              Upload, organize, and manage your Chorded <code className="text-blue-400">.crd</code> song charts. Star favorites and add charts straight to setlists.
+              Organize and manage your Chorded <code className="text-blue-400">.crd</code> song charts. Star favorites, add to setlists, and publish to the community.
             </p>
-          </div>
-
-          <div className="flex items-center gap-3 shrink-0">
-            <button
-              onClick={() => {
-                setUploadError(null);
-                setUploadFiles([]);
-                setIsUploadModalOpen(true);
-              }}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-semibold transition duration-200 cursor-pointer shadow-lg shadow-blue-600/25"
-            >
-              <Upload className="w-4 h-4" />
-              Upload .crd Files
-            </button>
           </div>
         </div>
 
@@ -529,7 +552,7 @@ export default function LibraryPage() {
             </div>
             <h3 className="text-lg font-bold text-white mb-2">Sign in to Access Your Library</h3>
             <p className="text-zinc-400 text-sm mb-6">
-              Create an account or sign in to upload, store, and view your .crd chord charts in the cloud.
+              Create an account or sign in to manage your .crd chord charts and publish them to the community.
             </p>
             <button
               onClick={() => setIsAuthModalOpen(true)}
@@ -554,30 +577,28 @@ export default function LibraryPage() {
             <p className="text-zinc-400 text-sm mb-6 max-w-md mx-auto">
               {searchQuery || selectedKeyFilter !== 'ALL' || onlyStarred
                 ? 'Try adjusting your filters or search keywords.'
-                : 'Upload your .crd score files exported from the Chorded desktop app to access them anywhere.'}
+                : 'Upload .crd files from the Chorded desktop app to get started.'}
             </p>
-            <button
-              onClick={() => {
-                setUploadError(null);
-                setUploadFiles([]);
-                setIsUploadModalOpen(true);
-              }}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-semibold transition cursor-pointer shadow-lg shadow-blue-600/20"
-            >
-              <Upload className="w-4 h-4" />
-              Upload .crd Files
-            </button>
           </div>
         )}
 
         {/* Batch Action Toolbar */}
         {selectedIds.size > 0 && (
-          <div className="mt-4 flex items-center gap-3 px-4 py-3 bg-blue-600/10 border border-blue-500/30 rounded-xl backdrop-blur-sm">
+          <div className="mt-4 flex items-center gap-3 px-4 py-3 bg-blue-600/10 border border-blue-500/30 rounded-xl backdrop-blur-sm flex-wrap">
             <div className="flex items-center gap-2 text-sm font-semibold text-blue-300">
               <CheckSquare className="w-4 h-4" />
               <span>{selectedIds.size} selected</span>
             </div>
             <div className="flex-1" />
+            {/* Make Public */}
+            <button
+              onClick={handleBatchPublish}
+              disabled={isPublishing}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 text-xs font-semibold border border-amber-500/30 transition cursor-pointer disabled:opacity-50"
+            >
+              {isPublishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
+              Make Public
+            </button>
             <button
               onClick={openBatchAddToSetlistModal}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 text-xs font-semibold border border-emerald-500/30 transition cursor-pointer"
@@ -727,9 +748,12 @@ export default function LibraryPage() {
                             <span className="text-zinc-100 group-hover:text-blue-300 font-semibold transition-colors">
                               {song.title}
                             </span>
-                            <span className="inline-flex items-center text-[10px] px-2 py-0.5 rounded bg-zinc-800/80 text-zinc-400 border border-zinc-700/50">
-                              By {getUploaderName(song, user?.id)}
-                            </span>
+                            {publishedIds.has(song.id) && (
+                              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                <Globe className="w-2.5 h-2.5" />
+                                Public
+                              </span>
+                            )}
                             {song.notes && (
                               <span className="text-xs text-zinc-500 truncate max-w-[200px] hidden lg:inline">
                                 ({song.notes})
