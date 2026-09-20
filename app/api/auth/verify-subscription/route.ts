@@ -70,7 +70,7 @@ export async function POST(req: Request) {
     // STRATEGY 2: Check via Gumroad Licenses Verify API
     // ─────────────────────────────────────────────────────────────
     if (!verifiedPurchase) {
-      const permalinksEnv = process.env.GUMROAD_PRODUCT_PERMALINKS || process.env.GUMROAD_PRODUCT_PERMALINK || '1month,1year';
+      const permalinksEnv = process.env.GUMROAD_PRODUCT_PERMALINKS || process.env.GUMROAD_PRODUCT_PERMALINK || '1year';
       const permalinks = permalinksEnv
         .split(',')
         .map((p) => p.trim())
