@@ -47,6 +47,7 @@ export interface LibrarySongLight {
 export interface PublicSong {
   id: string;
   user_id: string;
+  uploader_name?: string | null;
   library_song_id?: string | null;
   title: string;
   artist?: string | null;
@@ -112,12 +113,15 @@ export function getSongSlug(title: string, artist?: string | null): string {
 }
 
 export function getUploaderName(
-  song: Partial<LibrarySong | PublicSong>,
+  song: Partial<LibrarySong | PublicSong> & { uploader_name?: string | null },
   currentUserId?: string,
   currentUserProfile?: { display_name?: string | null; email?: string | null } | null
 ): string {
   if (song.profiles?.display_name && song.profiles.display_name.trim()) {
     return song.profiles.display_name.trim();
+  }
+  if (song.uploader_name && song.uploader_name.trim()) {
+    return song.uploader_name.trim();
   }
   if (song.profiles?.email) {
     const emailUser = song.profiles.email.split('@')[0];
@@ -328,6 +332,20 @@ export async function publishSongs(songs: LibrarySong[]): Promise<{ published: n
     (existing || []).map((r: any) => r.library_song_id as string)
   );
 
+  // Fetch current user's profile to get display_name
+  let uploaderName: string | null = null;
+  try {
+    const { data: prof } = await supabase
+      .from('profiles')
+      .select('display_name, email')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    uploaderName = prof?.display_name?.trim() || user.email?.split('@')[0] || null;
+  } catch {
+    uploaderName = user.email?.split('@')[0] || null;
+  }
+
   const toInsert = songs
     .filter(s => !alreadyPublished.has(s.id))
     .map(s => {
@@ -335,6 +353,7 @@ export async function publishSongs(songs: LibrarySong[]): Promise<{ published: n
       const effectiveArtist = artistName !== 'Traditional' ? artistName : (s.artist || null);
       return {
         user_id: user.id,
+        uploader_name: uploaderName,
         library_song_id: s.id,
         title: s.title,
         artist: effectiveArtist,
@@ -353,8 +372,15 @@ export async function publishSongs(songs: LibrarySong[]): Promise<{ published: n
     return { published: 0, skipped: alreadyPublished.size };
   }
 
-  const { error } = await supabase.from('public_songs').insert(toInsert);
-  if (error) {
+  let { error } = await supabase.from('public_songs').insert(toInsert);
+  if (error && error.message?.includes('uploader_name')) {
+    const fallbackToInsert = toInsert.map(({ uploader_name, ...rest }) => rest);
+    const fallbackRes = await supabase.from('public_songs').insert(fallbackToInsert);
+    if (fallbackRes.error) {
+      console.error('Error publishing songs (fallback):', fallbackRes.error);
+      throw fallbackRes.error;
+    }
+  } else if (error) {
     console.error('Error publishing songs:', error);
     throw error;
   }

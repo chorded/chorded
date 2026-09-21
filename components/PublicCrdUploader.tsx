@@ -175,8 +175,10 @@ export default function PublicCrdUploader({ userId: propUserId, onSuccess, onClo
       // If marked public, publish to public_songs table as well
       if (isPublic && insertRes.data && currentUserId) {
         try {
+          const uploaderName = profile?.display_name?.trim() || user?.email?.split('@')[0] || null;
           const publicPayload = {
             user_id: currentUserId,
+            uploader_name: uploaderName,
             library_song_id: insertRes.data.id,
             title: title.trim(),
             artist: songArtist !== 'Traditional' ? songArtist : null,
@@ -189,8 +191,12 @@ export default function PublicCrdUploader({ userId: propUserId, onSuccess, onClo
             raw_text: selectedFile.content,
             notes: songData.notes || '',
           };
-          const { error: pubErr } = await supabase.from('public_songs').insert(publicPayload);
-          if (pubErr) {
+          let { error: pubErr } = await supabase.from('public_songs').insert(publicPayload);
+          if (pubErr && pubErr.message?.includes('uploader_name')) {
+            const { uploader_name, ...fallbackPayload } = publicPayload;
+            const fallbackRes = await supabase.from('public_songs').insert(fallbackPayload);
+            if (fallbackRes.error) console.error('Error inserting into public_songs table (fallback):', fallbackRes.error);
+          } else if (pubErr) {
             console.error('Error inserting into public_songs table:', pubErr);
           }
         } catch (pubErr) {
