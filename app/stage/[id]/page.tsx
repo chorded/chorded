@@ -200,8 +200,9 @@ export default function StagePage() {
   // ── Go Live ─────────────────────────────────────────────────────────────
   const startLive = useCallback(async () => {
     if (!setlist) return;
-    const channel = supabase.channel(`live-${roomCode}`, {
-      config: { presence: { key: user!.id } },
+    const cleanRoomCode = roomCode.toUpperCase();
+    const channel = supabase.channel(`live-${cleanRoomCode}`, {
+      config: { presence: { key: user?.id || 'host' } },
     });
     channelRef.current = channel;
 
@@ -214,10 +215,16 @@ export default function StagePage() {
       })
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
-        setViewerCount(Object.keys(state).length);
+        let count = 0;
+        for (const key in state) {
+          const presences = state[key] as any[];
+          count += presences.filter(p => p.role === 'viewer').length;
+        }
+        setViewerCount(count);
       })
-      .subscribe(status => {
+      .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
+          await channel.track({ role: 'host', online_at: new Date().toISOString() }).catch(console.error);
           const payload = buildPayload();
           if (payload) {
             channel.send({ type: 'broadcast', event: 'setlist-init', payload }).catch(console.error);

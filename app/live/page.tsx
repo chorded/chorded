@@ -114,9 +114,11 @@ export default function LiveSessionPage() {
           }
         }
       })
-      .subscribe((status) => {
+      .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           setConnectionStatus('connected');
+          // Track presence so host receives viewer presence sync
+          await channel.track({ role: 'viewer', online_at: new Date().toISOString() }).catch(console.error);
           // Request initial sync in case we joined late
           channel.send({
             type: 'broadcast',
