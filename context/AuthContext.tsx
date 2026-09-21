@@ -9,6 +9,7 @@ export interface Profile {
   email: string | null;
   display_name: string | null;
   avatar_url: string | null;
+  username_changes_count?: number;
 }
 
 interface AuthContextType {
@@ -23,6 +24,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   checkSubscription: () => Promise<boolean>;
+  updateUsername: (newUsername: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -178,6 +180,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error ? new Error(error.message) : null };
   };
 
+  const updateUsername = async (newUsername: string): Promise<{ success: boolean; error?: string }> => {
+    if (!user || !profile) {
+      return { success: false, error: 'User not authenticated' };
+    }
+
+    const currentChanges = profile.username_changes_count ?? 0;
+    if (currentChanges >= 1) {
+      return { success: false, error: 'Username can only be changed once.' };
+    }
+
+    const trimmed = newUsername.trim();
+    if (!trimmed) {
+      return { success: false, error: 'Username cannot be empty.' };
+    }
+
+    try {
+      // First attempt with username_changes_count column
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          display_name: trimmed,
+          username_changes_count: currentChanges + 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+
+      if (error) {
+        console.warn('Primary profile update failed, falling back to display_name only:', error.message);
+        const fallback = await supabase
+          .from('profiles')
+          .update({
+            display_name: trimmed,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', user.id);
+
+        if (fallback.error) {
+          throw new Error(fallback.error.message);
+        }
+      }
+
+      await fetchProfile(user.id);
+      return { success: true };
+    } catch (err: any) {
+      console.error('Error updating username:', err);
+      return { success: false, error: err.message || 'Failed to update username' };
+    }
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -200,6 +251,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signOut,
         refreshProfile,
         checkSubscription,
+        updateUsername,
       }}
     >
       {children}

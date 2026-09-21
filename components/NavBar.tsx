@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import AuthModal from "@/components/auth/AuthModal";
+import EditUsernameModal from "@/components/EditUsernameModal";
 import { LogOut, User, Music, Library, ChevronDown } from "lucide-react";
 import type { LatestRelease } from "@/app/api/latest-release/route";
 
@@ -28,6 +29,7 @@ export default function NavBar() {
   const { user, profile, signOut, loading: authLoading } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isEditUsernameOpen, setIsEditUsernameOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState<string>(FALLBACK_URL);
   const [isSaleActive, setIsSaleActive] = useState<boolean>(true);
@@ -174,6 +176,24 @@ export default function NavBar() {
                         <button
                           onClick={() => {
                             setUserDropdownOpen(false);
+                            setIsEditUsernameOpen(true);
+                          }}
+                          className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-white/5 text-amber-400 hover:text-amber-300 text-left transition-colors cursor-pointer border-t border-b border-white/5"
+                        >
+                          <span className="flex items-center gap-2">
+                            <User className="w-3.5 h-3.5 text-amber-400" />
+                            Edit Username
+                          </span>
+                          {(profile?.username_changes_count ?? 0) < 1 && (
+                            <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-semibold border border-amber-500/30">
+                              1 edit left
+                            </span>
+                          )}
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setUserDropdownOpen(false);
                             signOut();
                           }}
                           className="w-full flex items-center gap-2 px-3.5 py-2 hover:bg-red-500/10 text-red-400 text-left cursor-pointer"
@@ -305,6 +325,7 @@ export default function NavBar() {
       </nav>
 
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+      <EditUsernameModal isOpen={isEditUsernameOpen} onClose={() => setIsEditUsernameOpen(false)} />
     </>
   );
 }

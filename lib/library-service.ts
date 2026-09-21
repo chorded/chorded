@@ -115,9 +115,6 @@ export function getUploaderName(
   song: Partial<LibrarySong | PublicSong>,
   currentUserId?: string
 ): string {
-  if (currentUserId && song.user_id && song.user_id === currentUserId) {
-    return 'You';
-  }
   if (song.profiles?.display_name && song.profiles.display_name.trim()) {
     return song.profiles.display_name.trim();
   }

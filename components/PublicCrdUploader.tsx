@@ -8,6 +8,7 @@ import { getSongSlug } from '@/lib/library-service';
 
 import { useAuth } from '@/context/AuthContext';
 import AuthModal from '@/components/auth/AuthModal';
+import EditUsernameModal from '@/components/EditUsernameModal';
 
 interface PublicCrdUploaderProps {
   userId?: string;
@@ -16,8 +17,9 @@ interface PublicCrdUploaderProps {
 }
 
 export default function PublicCrdUploader({ userId: propUserId, onSuccess, onClose }: PublicCrdUploaderProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const currentUserId = propUserId || user?.id;
+  const [isEditUsernameOpen, setIsEditUsernameOpen] = useState(false);
 
   const [dragActive, setDragActive] = useState<boolean>(false);
   const [selectedFile, setSelectedFile] = useState<{ file: File; content: string } | null>(null);
@@ -281,6 +283,19 @@ export default function PublicCrdUploader({ userId: propUserId, onSuccess, onClo
         </div>
       </div>
 
+      <div className="mb-4 flex items-center justify-between text-xs bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
+        <span className="text-slate-400">
+          Uploading as: <strong className="text-amber-300 font-semibold">{profile?.display_name || user?.email?.split('@')[0] || 'CHORDED Community'}</strong>
+        </span>
+        <button
+          type="button"
+          onClick={() => setIsEditUsernameOpen(true)}
+          className="text-amber-400 hover:text-amber-300 font-medium text-[11px] underline underline-offset-2 cursor-pointer"
+        >
+          {(profile?.username_changes_count ?? 0) < 1 ? 'Edit username (1 edit left)' : 'View username'}
+        </button>
+      </div>
+
       {errorMsg && (
         <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -428,6 +443,7 @@ export default function PublicCrdUploader({ userId: propUserId, onSuccess, onClo
           </button>
         </div>
       </form>
+      <EditUsernameModal isOpen={isEditUsernameOpen} onClose={() => setIsEditUsernameOpen(false)} />
     </div>
   );
 }
