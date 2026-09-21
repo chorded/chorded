@@ -113,15 +113,26 @@ export function getSongSlug(title: string, artist?: string | null): string {
 
 export function getUploaderName(
   song: Partial<LibrarySong | PublicSong>,
-  currentUserId?: string
+  currentUserId?: string,
+  currentUserProfile?: { display_name?: string | null; email?: string | null } | null
 ): string {
   if (song.profiles?.display_name && song.profiles.display_name.trim()) {
     return song.profiles.display_name.trim();
   }
   if (song.profiles?.email) {
-    return song.profiles.email.split('@')[0];
+    const emailUser = song.profiles.email.split('@')[0];
+    if (emailUser.trim()) return emailUser.trim();
   }
-  return 'CHORDED Community';
+  if (currentUserId && song.user_id === currentUserId && currentUserProfile) {
+    if (currentUserProfile.display_name && currentUserProfile.display_name.trim()) {
+      return currentUserProfile.display_name.trim();
+    }
+    if (currentUserProfile.email) {
+      const emailUser = currentUserProfile.email.split('@')[0];
+      if (emailUser.trim()) return emailUser.trim();
+    }
+  }
+  return 'Member';
 }
 
 export async function fetchLibrarySongsLight(): Promise<LibrarySongLight[]> {
@@ -180,26 +191,58 @@ export async function fetchLibrarySongs(): Promise<LibrarySong[]> {
 
 /** Fetch all publicly published songs (visible to everyone). */
 export async function fetchPublicSongs(): Promise<PublicSong[]> {
-  const { data, error } = await supabase
-    .from('public_songs')
-    .select('*, profiles:user_id(display_name, email)')
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    // Fallback without profile join
-    const { data: fallbackData, error: fallbackErr } = await supabase
+  try {
+    const { data, error } = await supabase
       .from('public_songs')
-      .select('*')
+      .select('*, profiles:user_id(display_name, email)')
       .order('created_at', { ascending: false });
 
-    if (fallbackErr) {
-      console.error('Error fetching public songs:', fallbackErr);
-      return [];
-    }
-    return (fallbackData as PublicSong[]) || [];
-  }
+    let songs = (data as PublicSong[]) || [];
 
-  return (data as PublicSong[]) || [];
+    if (error || songs.length === 0) {
+      const { data: fallbackData, error: fallbackErr } = await supabase
+        .from('public_songs')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (fallbackErr) {
+        console.error('Error fetching public songs:', fallbackErr);
+        return [];
+      }
+      songs = (fallbackData as PublicSong[]) || [];
+    }
+
+    // Secondary profile resolution for songs missing profile data
+    const missingUserIds = Array.from(
+      new Set(songs.filter(s => s.user_id && !s.profiles?.display_name && !s.profiles?.email).map(s => s.user_id))
+    );
+
+    if (missingUserIds.length > 0) {
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, display_name, email')
+        .in('id', missingUserIds);
+
+      if (profilesData && profilesData.length > 0) {
+        const profileMap = new Map(profilesData.map(p => [p.id, p]));
+        songs = songs.map(s => {
+          if ((!s.profiles || (!s.profiles.display_name && !s.profiles.email)) && s.user_id && profileMap.has(s.user_id)) {
+            const p = profileMap.get(s.user_id)!;
+            return {
+              ...s,
+              profiles: { display_name: p.display_name, email: p.email }
+            };
+          }
+          return s;
+        });
+      }
+    }
+
+    return songs;
+  } catch (err) {
+    console.error('Error in fetchPublicSongs:', err);
+    return [];
+  }
 }
 
 /** Fetch only the current user's published songs (for "My Uploads" tab). */
@@ -207,28 +250,48 @@ export async function fetchMyPublicSongs(): Promise<PublicSong[]> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
 
-  const { data, error } = await supabase
-    .from('public_songs')
-    .select('*, profiles:user_id(display_name, email)')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching my public songs with profiles join:', error);
-    // Fallback query without profile join
-    const { data: fallbackData, error: fallbackErr } = await supabase
+  try {
+    const { data, error } = await supabase
       .from('public_songs')
-      .select('*')
+      .select('*, profiles:user_id(display_name, email)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 
-    if (fallbackErr) {
-      console.error('Error fetching my public songs (fallback):', fallbackErr);
-      return [];
+    let songs = (data as PublicSong[]) || [];
+
+    if (error) {
+      console.error('Error fetching my public songs with profiles join:', error);
+      const { data: fallbackData, error: fallbackErr } = await supabase
+        .from('public_songs')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (fallbackErr) {
+        console.error('Error fetching my public songs (fallback):', fallbackErr);
+        return [];
+      }
+      songs = (fallbackData as PublicSong[]) || [];
     }
-    return (fallbackData as PublicSong[]) || [];
+
+    // Attach current profile if missing
+    if (songs.some(s => !s.profiles?.display_name && !s.profiles?.email)) {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('display_name, email')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (prof) {
+        songs = songs.map(s => (s.profiles?.display_name || s.profiles?.email) ? s : { ...s, profiles: prof });
+      }
+    }
+
+    return songs;
+  } catch (err) {
+    console.error('Error in fetchMyPublicSongs:', err);
+    return [];
   }
-  return (data as PublicSong[]) || [];
 }
 
 /** Fetch the set of library_song_ids the current user has already published. */

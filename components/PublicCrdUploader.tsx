@@ -285,7 +285,7 @@ export default function PublicCrdUploader({ userId: propUserId, onSuccess, onClo
 
       <div className="mb-4 flex items-center justify-between text-xs bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
         <span className="text-slate-400">
-          Uploading as: <strong className="text-amber-300 font-semibold">{profile?.display_name || user?.email?.split('@')[0] || 'CHORDED Community'}</strong>
+          Uploading as: <strong className="text-amber-300 font-semibold">{profile?.display_name || user?.email?.split('@')[0] || 'Member'}</strong>
         </span>
         <button
           type="button"

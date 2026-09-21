@@ -22,7 +22,7 @@ interface PublicChordsClientProps {
 type ActiveTab = 'all' | 'my-uploads';
 
 export default function PublicChordsClient({ initialSongs }: PublicChordsClientProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [activeTab, setActiveTab] = useState<ActiveTab>('all');
   const [songsList, setSongsList] = useState<PublicSong[]>(initialSongs);
   const [myUploadsList, setMyUploadsList] = useState<PublicSong[]>([]);
@@ -104,7 +104,7 @@ export default function PublicChordsClient({ initialSongs }: PublicChordsClientP
     const artistSlug = slugify(artistName);
     const songSlug = getSongSlug(song.title, song.artist || artistName);
     const href = `/chords/${artistSlug}/${songSlug}`;
-    const uploaderName = getUploaderName(song, user?.id);
+    const uploaderName = getUploaderName(song, user?.id, profile);
     const isDeleting = deletingId === song.id;
 
     return (

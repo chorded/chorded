@@ -12,9 +12,9 @@ interface PublicSongDetailClientProps {
 }
 
 export default function PublicSongDetailClient({ song }: PublicSongDetailClientProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const artistName = getSongArtist(song);
-  const uploaderName = getUploaderName(song, user?.id);
+  const uploaderName = getUploaderName(song, user?.id, profile);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-amber-500/30">

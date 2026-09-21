@@ -18,9 +18,9 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 -- Profiles RLS Policies
-CREATE POLICY "Users can view their own profile"
+CREATE POLICY "Public profiles are viewable by everyone"
   ON public.profiles FOR SELECT
-  USING (auth.uid() = id);
+  USING (true);
 
 CREATE POLICY "Users can update their own profile"
   ON public.profiles FOR UPDATE
@@ -196,4 +196,49 @@ CREATE POLICY "Users can update songs in their own library"
 CREATE POLICY "Users can delete songs from their own library"
   ON public.library_songs FOR DELETE
   USING (auth.uid() = user_id);
+
+
+-- 5. Create Public Songs Table (Published Songs Directory)
+CREATE TABLE IF NOT EXISTS public.public_songs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  library_song_id UUID,
+  title TEXT NOT NULL,
+  artist TEXT,
+  slug TEXT,
+  original_key TEXT DEFAULT 'C',
+  current_key TEXT DEFAULT 'C',
+  bpm INTEGER,
+  time_signature TEXT,
+  content JSONB NOT NULL DEFAULT '{"type": "doc", "content": []}'::jsonb,
+  raw_text TEXT DEFAULT '',
+  notes TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Index for public song directory lookups
+CREATE INDEX IF NOT EXISTS idx_public_songs_created_at
+  ON public.public_songs (created_at DESC);
+
+-- Enable RLS on public_songs
+ALTER TABLE public.public_songs ENABLE ROW LEVEL SECURITY;
+
+-- Public Songs RLS Policies
+CREATE POLICY "Anyone can view public songs"
+  ON public.public_songs FOR SELECT
+  USING (true);
+
+CREATE POLICY "Users can insert their own public songs"
+  ON public.public_songs FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own public songs"
+  ON public.public_songs FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own public songs"
+  ON public.public_songs FOR DELETE
+  USING (auth.uid() = user_id);
+
 
