@@ -44,8 +44,8 @@ BEGIN
   ON CONFLICT (id) DO UPDATE
   SET
     email = EXCLUDED.email,
-    display_name = COALESCE(EXCLUDED.display_name, public.profiles.display_name),
-    avatar_url = COALESCE(EXCLUDED.avatar_url, public.profiles.avatar_url),
+    display_name = COALESCE(public.profiles.display_name, EXCLUDED.display_name),
+    avatar_url = COALESCE(public.profiles.avatar_url, EXCLUDED.avatar_url),
     updated_at = NOW();
   RETURN NEW;
 END;

@@ -221,6 +221,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
+      // Also update auth user metadata so token refreshes preserve the new display name
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            full_name: trimmed,
+            name: trimmed,
+            display_name: trimmed,
+          },
+        });
+      } catch (authErr) {
+        console.warn('Failed to sync auth user metadata:', authErr);
+      }
+
       await fetchProfile(user.id);
       return { success: true };
     } catch (err: any) {
