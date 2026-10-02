@@ -42,13 +42,20 @@ export async function GET() {
         new Date(a.published_at || 0).getTime()
     );
 
-    const latest = published[0] ?? releases[0];
-
-    // Find the .exe installer asset (ignore .blockmap, .yml, etc.)
-    const exeAsset = latest.assets?.find(
-      (a: { name: string; browser_download_url: string }) =>
-        a.name.endsWith(".exe") && !a.name.endsWith(".blockmap")
+    // Find the most recent release that actually has a .exe asset uploaded.
+    // This handles the case where the latest release was deleted and re-uploaded
+    // and temporarily had no assets attached.
+    let exeAsset: { name: string; browser_download_url: string } | undefined;
+    const releaseWithAsset = published.find(
+      (rel: { assets?: { name: string; browser_download_url: string }[] }) => {
+        const found = rel.assets?.find(
+          (a) => a.name.endsWith(".exe") && !a.name.endsWith(".blockmap")
+        );
+        if (found) { exeAsset = found; return true; }
+        return false;
+      }
     );
+    const latest = releaseWithAsset ?? published[0] ?? releases[0];
 
     // Calculate total download count across all releases & assets
     let downloadCount = 0;
@@ -69,6 +76,7 @@ export async function GET() {
 
     const release: LatestRelease = {
       version: latest.tag_name ?? latest.name ?? "latest",
+      // Never fall back to html_url — that's the releases page, not a direct download.
       downloadUrl: exeAsset?.browser_download_url ?? latest.html_url,
       htmlUrl: latest.html_url,
       downloadCount,

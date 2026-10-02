@@ -36,12 +36,20 @@ async function getLatestRelease(): Promise<LatestRelease> {
         new Date(a.published_at || 0).getTime()
     );
 
-    const latest = published[0] ?? releases[0];
-
-    const exeAsset = latest.assets?.find(
-      (a: { name: string; browser_download_url: string }) =>
-        a.name.endsWith(".exe") && !a.name.endsWith(".blockmap")
+    // Find the most recent release that actually has a .exe asset uploaded.
+    // This handles the case where the latest release was deleted and re-uploaded
+    // and temporarily had no assets attached.
+    let exeAsset: { name: string; browser_download_url: string } | undefined;
+    const releaseWithAsset = published.find(
+      (rel: { assets?: { name: string; browser_download_url: string }[] }) => {
+        const found = rel.assets?.find(
+          (a) => a.name.endsWith(".exe") && !a.name.endsWith(".blockmap")
+        );
+        if (found) { exeAsset = found; return true; }
+        return false;
+      }
     );
+    const latest = releaseWithAsset ?? published[0] ?? releases[0];
 
     let downloadCount = 0;
     if (Array.isArray(releases)) {
@@ -60,7 +68,9 @@ async function getLatestRelease(): Promise<LatestRelease> {
 
     return {
       version: latest.tag_name ?? "latest",
-      downloadUrl: exeAsset?.browser_download_url ?? latest.html_url ?? FALLBACK_URL,
+      // Use the direct asset URL; only fall back to FALLBACK_URL (never html_url
+      // which is the releases page, not a direct download).
+      downloadUrl: exeAsset?.browser_download_url ?? FALLBACK_URL,
       htmlUrl: latest.html_url ?? FALLBACK_URL,
       downloadCount,
     };
