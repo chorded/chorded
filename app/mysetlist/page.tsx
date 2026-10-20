@@ -39,6 +39,7 @@ import {
   FileText,
 } from 'lucide-react';
 import Link from 'next/link';
+import { getSemitoneDifference, transposeDocChords, transposeTextChords } from '@/utils/transposer';
 
 const MUSICAL_KEYS = ['C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab', 'A', 'A#', 'Bb', 'B'];
 
@@ -46,6 +47,7 @@ const MUSICAL_KEYS = ['C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G
 interface PickerSong extends LibrarySongLight {
   selected: boolean;
   order: number; // 0 = not selected; >0 = position
+  chosenKey?: string;
 }
 
 export default function MySetlistPage() {
@@ -126,7 +128,7 @@ export default function MySetlistPage() {
         const removedOrder = song.order;
         return prev.map(s =>
           s.id === id
-            ? { ...s, selected: false, order: 0 }
+            ? { ...s, selected: false, order: 0, chosenKey: undefined }
             : s.order > removedOrder
             ? { ...s, order: s.order - 1 }
             : s
@@ -134,7 +136,16 @@ export default function MySetlistPage() {
       } else {
         // Select: assign next order
         const nextOrder = prev.filter(s => s.selected).length + 1;
-        return prev.map(s => s.id === id ? { ...s, selected: true, order: nextOrder } : s);
+        return prev.map(s =>
+          s.id === id
+            ? {
+                ...s,
+                selected: true,
+                order: nextOrder,
+                chosenKey: s.current_key || s.original_key || 'C',
+              }
+            : s
+        );
       }
     });
   };
@@ -176,15 +187,23 @@ export default function MySetlistPage() {
         const fullMap = new Map(allFull.map(s => [s.id, s]));
         songPayload = selectedSongs.map((s, idx) => {
           const full = fullMap.get(s.id);
+          const origKey = s.original_key || s.current_key || 'C';
+          const targetKey = s.chosenKey || s.current_key || origKey;
+          const semitones = getSemitoneDifference(origKey, targetKey);
+          const baseContent = full?.content ?? { type: 'doc', content: [] };
+          const transposedContent = semitones !== 0 ? transposeDocChords(baseContent, semitones) : baseContent;
+          const baseRawText = full?.raw_text ?? '';
+          const transposedRawText = semitones !== 0 ? transposeTextChords(baseRawText, semitones) : baseRawText;
+
           return {
             song_index: idx,
             title: s.title,
-            original_key: s.original_key,
-            current_key: s.current_key,
+            original_key: origKey,
+            current_key: targetKey,
             bpm: s.bpm ?? null,
             time_signature: s.time_signature ?? null,
-            content: full?.content ?? { type: 'doc', content: [] },
-            raw_text: full?.raw_text ?? '',
+            content: transposedContent,
+            raw_text: transposedRawText,
             notes: full?.notes ?? '',
           };
         });
@@ -264,7 +283,15 @@ export default function MySetlistPage() {
   };
 
   const changeEditSongKey = (index: number, newKey: string) => {
-    setEditSongs(prev => prev.map((s, i) => (i === index ? { ...s, current_key: newKey } : s)));
+    setEditSongs(prev => {
+      const target = prev[index];
+      if (!target) return prev;
+      const oldKey = target.current_key || target.original_key || 'C';
+      const semitones = getSemitoneDifference(oldKey, newKey);
+      const newContent = semitones !== 0 ? transposeDocChords(target.content, semitones) : target.content;
+      const newRawText = semitones !== 0 && target.raw_text ? transposeTextChords(target.raw_text, semitones) : target.raw_text;
+      return prev.map((s, i) => (i === index ? { ...s, current_key: newKey, content: newContent, raw_text: newRawText } : s));
+    });
   };
 
   const changeEditSongNotes = (index: number, notes: string) => {
@@ -488,18 +515,20 @@ export default function MySetlistPage() {
                     <div className="mt-4 pt-4 border-t border-white/5 space-y-1.5">
                       {setlist.songs && setlist.songs.length > 0 ? (
                         setlist.songs.slice(0, 4).map((song, idx) => (
-                          <div
+                          <Link
                             key={song.id || idx}
-                            className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-white/5 text-zinc-300"
+                            href={`/stage/${setlist.id}#song-${idx}`}
+                            className="flex items-center justify-between text-xs py-1.5 px-2 rounded-lg bg-white/5 hover:bg-blue-600/15 hover:border hover:border-blue-500/30 text-zinc-300 hover:text-white transition-all group/song"
+                            title={`Open Stage directly at ${song.title}`}
                           >
                             <span className="truncate pr-2">
-                              <span className="text-zinc-500 font-mono mr-1.5">{idx + 1}.</span>
-                              {song.title}
+                              <span className="text-zinc-500 font-mono mr-1.5 group-hover/song:text-blue-400">{idx + 1}.</span>
+                              <span className="group-hover/song:underline">{song.title}</span>
                             </span>
                             <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 shrink-0">
                               {song.current_key || song.original_key || 'C'}
                             </span>
-                          </div>
+                          </Link>
                         ))
                       ) : (
                         <div className="text-xs text-zinc-500 italic py-2">No songs added yet.</div>
@@ -620,9 +649,24 @@ export default function MySetlistPage() {
                           {idx + 1}
                         </span>
                         <span className="flex-1 text-sm font-medium text-white truncate">{song.title}</span>
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-mono shrink-0">
-                          {song.current_key}
-                        </span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-[10px] text-zinc-400">Key:</span>
+                          <select
+                            value={song.chosenKey || song.current_key || song.original_key || 'C'}
+                            onChange={e => {
+                              const newKey = e.target.value;
+                              setLibrarySongs(prev => prev.map(s => s.id === song.id ? { ...s, chosenKey: newKey } : s));
+                            }}
+                            className="bg-zinc-800 border border-white/10 text-blue-300 text-xs font-mono font-bold rounded-lg px-2 py-0.5 focus:outline-none focus:border-blue-500 cursor-pointer"
+                            title="Setlist key for this song"
+                          >
+                            {MUSICAL_KEYS.map(k => (
+                              <option key={k} value={k}>
+                                {k}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                         <button
                           onClick={() => moveSong(song.id, 'up')}
                           disabled={idx === 0}
@@ -845,8 +889,8 @@ export default function MySetlistPage() {
                             </span>
 
                             {/* Key selector dropdown */}
-                            <div className="flex items-center gap-1 shrink-0">
-                              <span className="text-[11px] text-zinc-400 mr-0.5">Key:</span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[11px] text-zinc-400">Key:</span>
                               <select
                                 value={song.current_key || song.original_key || 'C'}
                                 onChange={e => changeEditSongKey(idx, e.target.value)}
@@ -858,6 +902,11 @@ export default function MySetlistPage() {
                                   </option>
                                 ))}
                               </select>
+                              {song.original_key && song.original_key !== (song.current_key || 'C') && (
+                                <span className="text-[10px] text-zinc-500 font-mono" title={`Original key was ${song.original_key}`}>
+                                  (Orig: {song.original_key})
+                                </span>
+                              )}
                             </div>
 
                             {/* Song notes toggle */}

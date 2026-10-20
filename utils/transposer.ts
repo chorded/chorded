@@ -131,6 +131,67 @@ export function transposeKey(key: string, semitones: number): string {
 }
 
 /**
+ * Calculates the shortest signed semitone difference from `fromKey` to `toKey`.
+ * Returns a value between -5 and +6.
+ */
+export function getSemitoneDifference(fromKey: string, toKey: string): number {
+  if (!fromKey || !toKey) return 0
+  const pFrom = parseChord(fromKey.trim())
+  const pTo = parseChord(toKey.trim())
+  if (!pFrom || !pTo) return 0
+  const idxFrom = noteIndex(pFrom.root)
+  const idxTo = noteIndex(pTo.root)
+  if (idxFrom === -1 || idxTo === -1) return 0
+  let diff = (idxTo - idxFrom) % 12
+  if (diff < 0) diff += 12
+  if (diff > 6) diff -= 12
+  return diff
+}
+
+/**
+ * Transposes all TipTap chord nodes within a document JSON object.
+ */
+export function transposeDocChords(doc: any, semitones: number): any {
+  if (!doc || semitones === 0) return doc
+  const preferFlats = semitones < 0
+
+  function cloneAndTranspose(node: any): any {
+    if (!node || typeof node !== 'object') return node
+    const newNode = Array.isArray(node) ? [...node] : { ...node }
+
+    if (newNode.type === 'chord' && newNode.attrs && typeof newNode.attrs.chord === 'string') {
+      newNode.attrs = {
+        ...newNode.attrs,
+        chord: transposeChord(newNode.attrs.chord, semitones, preferFlats),
+      }
+    }
+
+    if (Array.isArray(newNode.content)) {
+      newNode.content = newNode.content.map(cloneAndTranspose)
+    }
+
+    return newNode
+  }
+
+  return cloneAndTranspose(doc)
+}
+
+/**
+ * Transposes bracketed chord notation in raw text lines e.g. "[G] [Am]".
+ */
+export function transposeTextChords(text: string, semitones: number): string {
+  if (!text || semitones === 0) return text
+  const preferFlats = semitones < 0
+
+  return text.replace(/\[([A-Ga-g][b#♭♯]?[^\]]*)\]/g, (match, chord) => {
+    if (isLikelyChord(chord)) {
+      return `[${transposeChord(chord, semitones, preferFlats)}]`
+    }
+    return match
+  })
+}
+
+/**
  * Returns true if the string is a recognisable chord.
  */
 export function isValidChord(str: string): boolean {

@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS public.setlists (
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   title TEXT NOT NULL,
   description TEXT DEFAULT '',
+  is_shared BOOLEAN DEFAULT FALSE,
   stage_preferences JSONB DEFAULT '{"nashville": false, "isDarkStage": true, "zoom": 1.0}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -76,6 +77,10 @@ ALTER TABLE public.setlists ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view their own setlists"
   ON public.setlists FOR SELECT
   USING (auth.uid() = user_id);
+
+CREATE POLICY "Anyone can view shared setlists"
+  ON public.setlists FOR SELECT
+  USING (is_shared = true);
 
 CREATE POLICY "Users can insert their own setlists"
   ON public.setlists FOR INSERT
@@ -122,6 +127,16 @@ CREATE POLICY "Users can view songs in their own setlists"
       SELECT 1 FROM public.setlists 
       WHERE public.setlists.id = public.setlist_songs.setlist_id 
       AND public.setlists.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Anyone can view songs in shared setlists"
+  ON public.setlist_songs FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.setlists
+      WHERE public.setlists.id = public.setlist_songs.setlist_id
+      AND public.setlists.is_shared = true
     )
   );
 

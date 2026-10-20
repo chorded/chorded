@@ -201,6 +201,29 @@ export async function updateSetlist(
   return updated;
 }
 
+export async function updateSetlistSongKey(
+  songId: string,
+  newKey: string,
+  content?: any
+): Promise<void> {
+  const payload: any = {
+    current_key: newKey,
+    updated_at: new Date().toISOString(),
+  };
+  if (content) {
+    payload.content = content;
+  }
+  const { error } = await supabase
+    .from('setlist_songs')
+    .update(payload)
+    .eq('id', songId);
+
+  if (error) {
+    console.error('Error updating setlist song key:', error);
+    throw error;
+  }
+}
+
 import { buildContentFromLines } from '@/components/tiptap/ChordExtension';
 
 /**

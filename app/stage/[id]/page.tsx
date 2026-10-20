@@ -15,14 +15,12 @@ import { normalizeContent } from '@/utils/normalize';
 import { LiveViewerProvider } from '@/components/tiptap/LiveViewerContext';
 import QRCode from 'react-qr-code';
 import {
-  Radio,
   Copy,
   Check,
   Music,
   Loader2,
   XCircle,
   ChevronLeft,
-  Users,
   Wifi,
   WifiOff,
   QrCode,
@@ -30,21 +28,16 @@ import {
   Sun,
   Moon,
   Upload,
+  Radio,
+  Share2,
+  Save,
+  RotateCcw,
+  ListMusic,
+  ChevronDown,
+  Search,
+  ArrowUp,
 } from 'lucide-react';
 
-// ── Derive a stable 6-char room PIN from a UUID ────────────────────────────
-function deriveRoomCode(uuid: string): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous chars
-  const hex = uuid.replace(/-/g, '');
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    const byte = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-    code += chars[byte % chars.length];
-  }
-  return code;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 export default function StagePage() {
   const params = useParams();
   const router = useRouter();
@@ -55,25 +48,65 @@ export default function StagePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Live state
-  const [isLive, setIsLive] = useState(false);
-  const [channelRef] = useState<{ current: any }>({ current: null });
-  const [viewerCount, setViewerCount] = useState(0);
+  // Share state
+  const [isShared, setIsShared] = useState(false);
+  const [sharingLoading, setSharingLoading] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [nashville, setNashville] = useState(false);
 
   // UI state
   const [showQR, setShowQR] = useState(false);
-  const [codeCopied, setCodeCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const lastScrollTime = useRef(0);
+  // Song jump state
+  const [activeSongIndex, setActiveSongIndex] = useState<number | null>(null);
+  const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
+  const [songMenuOpen, setSongMenuOpen] = useState(false);
+  const [songFilter, setSongFilter] = useState('');
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
-  const roomCode = setlistId ? deriveRoomCode(setlistId) : '';
-  const liveUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/live?code=${roomCode}`
-    : `/live?code=${roomCode}`;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const scrollToSong = (index: number) => {
+    setActiveSongIndex(index);
+    setHighlightedIndex(index);
+    setSongMenuOpen(false);
+    setSongFilter('');
+
+    const el = document.getElementById(`song-${index}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    setTimeout(() => {
+      setHighlightedIndex((cur) => (cur === index ? null : cur));
+    }, 1800);
+  };
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setSongMenuOpen(false);
+      }
+    };
+    if (songMenuOpen) {
+      document.addEventListener('mousedown', handleOutsideClick);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [songMenuOpen]);
+
+  const handleScroll = () => {
+    if (scrollRef.current) {
+      setShowScrollTop(scrollRef.current.scrollTop > 350);
+    }
+  };
+
+  const shareUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/setlist/${setlistId}/view`
+    : `/setlist/${setlistId}/view`;
 
   // ── Load setlist ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -85,6 +118,8 @@ export default function StagePage() {
       if (!data) { setError('Setlist not found.'); setLoading(false); return; }
       if (data.user_id !== user.id) { setError('You do not own this setlist.'); setLoading(false); return; }
       setSetlist(data);
+      // Load current share state from DB
+      setIsShared(!!(data as any).is_shared);
       setLoading(false);
     }).catch(() => {
       setError('Failed to load setlist.');
@@ -92,20 +127,46 @@ export default function StagePage() {
     });
   }, [setlistId, user, authLoading]);
 
-  // ── Build the payload that gets broadcast to viewers ──────────────────
-  const buildPayload = useCallback(() => {
-    if (!setlist?.songs) return null;
-    return {
-      songs: setlist.songs.map((s, i) => ({
-        songIndex: i,
-        title: s.title,
-        key: s.current_key || s.original_key || 'C',
-        content: (s as any).editorContent || s.content || { type: 'doc', content: [] },
-      })),
-      nashville,
-      isDarkStage: isDarkMode,
-    };
-  }, [setlist, nashville, isDarkMode]);
+  // Auto-scroll to song if URL contains #song-N
+  useEffect(() => {
+    if (!loading && setlist && setlist.songs && setlist.songs.length > 0) {
+      const songs = setlist.songs;
+      const handleHash = () => {
+        if (typeof window !== 'undefined' && window.location.hash) {
+          const match = window.location.hash.match(/^#song-(\d+)$/);
+          if (match) {
+            const idx = parseInt(match[1], 10);
+            if (!isNaN(idx) && idx >= 0 && idx < songs.length) {
+              setTimeout(() => scrollToSong(idx), 350);
+            }
+          }
+        }
+      };
+      handleHash();
+      window.addEventListener('hashchange', handleHash);
+      return () => window.removeEventListener('hashchange', handleHash);
+    }
+  }, [loading, setlist]);
+
+  // ── Toggle share state ───────────────────────────────────────────────────
+  const toggleShare = useCallback(async () => {
+    if (!setlist) return;
+    const next = !isShared;
+    setSharingLoading(true);
+    try {
+      const { error } = await supabase
+        .from('setlists')
+        .update({ is_shared: next } as any)
+        .eq('id', setlistId);
+      if (error) throw error;
+      setIsShared(next);
+    } catch (err: any) {
+      console.error('Failed to update share state:', err);
+      alert(`Failed to ${next ? 'share' : 'unshare'} setlist: ${err.message}`);
+    } finally {
+      setSharingLoading(false);
+    }
+  }, [setlist, isShared, setlistId]);
 
   // ── Sync / Upload .crd files directly on Stage page ─────────────────────
   const handleSyncCrdFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -174,21 +235,8 @@ export default function StagePage() {
 
       if (hasChanges) {
         setSetlist({ ...setlist, songs: updatedSongs });
-
-        if (isLive && channelRef.current) {
-          const payload = {
-            songs: updatedSongs.map((s, i) => ({
-              songIndex: i,
-              title: s.title,
-              key: s.current_key || s.original_key || 'C',
-              content: s.content || { type: 'doc', content: [] },
-            })),
-            nashville,
-            isDarkStage: isDarkMode,
-          };
-          channelRef.current.send({ type: 'broadcast', event: 'setlist-init', payload }).catch(console.error);
-        }
       }
+
     } catch (err: any) {
       console.error('Failed to sync .crd files:', err);
       alert(`Failed to sync score files: ${err.message}`);
@@ -197,96 +245,9 @@ export default function StagePage() {
     }
   };
 
-  // ── Go Live ─────────────────────────────────────────────────────────────
-  const startLive = useCallback(async () => {
-    if (!setlist) return;
-    const cleanRoomCode = roomCode.toUpperCase();
-    const channel = supabase.channel(`live-${cleanRoomCode}`, {
-      config: { presence: { key: user?.id || 'host' } },
-    });
-    channelRef.current = channel;
-
-    channel
-      .on('broadcast', { event: 'request-sync' }, () => {
-        const payload = buildPayload();
-        if (payload) {
-          channel.send({ type: 'broadcast', event: 'setlist-init', payload }).catch(console.error);
-        }
-      })
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        let count = 0;
-        for (const key in state) {
-          const presences = state[key] as any[];
-          count += presences.filter(p => p.role === 'viewer').length;
-        }
-        setViewerCount(count);
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({ role: 'host', online_at: new Date().toISOString() }).catch(console.error);
-          const payload = buildPayload();
-          if (payload) {
-            channel.send({ type: 'broadcast', event: 'setlist-init', payload }).catch(console.error);
-          }
-          setIsLive(true);
-        }
-      });
-  }, [setlist, roomCode, user, buildPayload, channelRef]);
-
-  // ── Stop Live ────────────────────────────────────────────────────────────
-  const stopLive = useCallback(async () => {
-    if (channelRef.current) {
-      await channelRef.current.send({ type: 'broadcast', event: 'live-stopped', payload: {} }).catch(console.error);
-      supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
-    }
-    setIsLive(false);
-    setViewerCount(0);
-  }, [channelRef]);
-
-  // Re-broadcast when dark mode / nashville toggles while live
-  useEffect(() => {
-    if (!isLive || !channelRef.current) return;
-    const payload = buildPayload();
-    if (payload) {
-      channelRef.current.send({ type: 'broadcast', event: 'setlist-init', payload }).catch(console.error);
-    }
-  }, [isDarkMode, nashville, isLive, buildPayload, channelRef]);
-
-  // Cleanup on unmount
-  useEffect(() => () => { stopLive(); }, [stopLive]);
-
-  // ── Scroll sync ───────────────────────────────────────────────────────────
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el || !isLive || !channelRef.current) return;
-
-    const onScroll = () => {
-      const now = Date.now();
-      if (now - lastScrollTime.current < 60) return;
-      lastScrollTime.current = now;
-      const scrollRatio = el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight);
-      channelRef.current?.send({
-        type: 'broadcast',
-        event: 'scroll-update',
-        payload: { scrollRatio, zoom: 1.0 },
-      }).catch(console.error);
-    };
-
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
-  }, [isLive, channelRef]);
-
-  // ── Copy helpers ──────────────────────────────────────────────────────────
-  const copyCode = () => {
-    navigator.clipboard.writeText(roomCode);
-    setCodeCopied(true);
-    setTimeout(() => setCodeCopied(false), 2000);
-  };
-
+  // ── Copy share link ──────────────────────────────────────────────────────
   const copyLink = () => {
-    navigator.clipboard.writeText(liveUrl);
+    navigator.clipboard.writeText(shareUrl);
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 2000);
   };
@@ -316,41 +277,32 @@ export default function StagePage() {
     const gumroadUrl = process.env.NEXT_PUBLIC_GUMROAD_YEARLY_URL || process.env.NEXT_PUBLIC_GUMROAD_MONTHLY_URL || "https://chorded.gumroad.com/l/1year";
     return (
       <div className="min-h-screen bg-[#0A0A0C] flex flex-col items-center justify-center p-6 text-white relative overflow-hidden">
-        {/* Subtle background glow */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-600/15 blur-[120px] rounded-full pointer-events-none" />
-
         <div className="relative z-10 max-w-lg w-full bg-[#141417] border border-blue-500/30 rounded-3xl p-8 text-center shadow-2xl backdrop-blur-xl">
-          {/* Badge */}
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-semibold uppercase tracking-wider mb-6">
-            <Radio className="w-3.5 h-3.5 animate-pulse text-blue-400" />
+            <Share2 className="w-3.5 h-3.5 text-blue-400" />
             <span>Pro Feature Required</span>
           </div>
-
           <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight mb-3 text-white">
-            Stage Runner & Live Sync
+            Stage Runner & Shared Setlists
           </h2>
-
           <p className="text-zinc-400 text-sm leading-relaxed mb-6">
-            Live setlist broadcasting and stage runner access are reserved for subscribers who purchased a subscription on Gumroad.
+            Shared setlist links and stage runner access are reserved for subscribers.
           </p>
-
-          {/* Benefits list */}
           <div className="bg-zinc-900/80 border border-white/5 rounded-2xl p-4 mb-6 text-left space-y-3">
             <div className="flex items-center gap-3 text-xs text-zinc-300">
               <div className="p-1.5 rounded-lg bg-blue-500/20 text-blue-400">
-                <Radio className="w-4 h-4" />
+                <Share2 className="w-4 h-4" />
               </div>
-              <span>Broadcast live setlist to band members via PIN / QR code</span>
+              <span>Share a link — anyone with it can view your setlist instantly</span>
             </div>
             <div className="flex items-center gap-3 text-xs text-zinc-300">
               <div className="p-1.5 rounded-lg bg-purple-500/20 text-purple-400">
                 <Music className="w-4 h-4" />
               </div>
-              <span>Real-time Nashville numbering & instant key transposition</span>
+              <span>Nashville numbering & instant key transposition for viewers</span>
             </div>
           </div>
-
-          {/* Actions */}
           <div className="flex flex-col gap-3">
             <a
               href={gumroadUrl}
@@ -382,19 +334,113 @@ export default function StagePage() {
 
           {/* Back */}
           <button
-            onClick={() => { stopLive(); router.push('/mysetlist'); }}
+            onClick={() => router.push('/mysetlist')}
             className={`p-2 rounded-lg transition-colors ${isDarkMode ? 'hover:bg-white/10 text-slate-400 hover:text-white' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-900'}`}
             title="Back to MySetlist"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
 
-          {/* Setlist name */}
-          <div className="flex-1 min-w-0">
-            <p className={`text-[11px] font-semibold uppercase tracking-widest ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
-              HOST — STAGE VIEW
-            </p>
-            <h1 className="text-sm font-bold truncate">{setlist?.title}</h1>
+          {/* Setlist name & song dropdown */}
+          <div className="flex-1 min-w-0 flex items-center gap-3">
+            <div className="min-w-0">
+              <p className={`text-[11px] font-semibold uppercase tracking-widest ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                HOST — STAGE VIEW
+              </p>
+              <h1 className="text-sm font-bold truncate">{setlist?.title}</h1>
+            </div>
+
+            {setlist?.songs && setlist.songs.length > 0 && (
+              <div className="relative shrink-0" ref={menuRef}>
+                <button
+                  onClick={() => setSongMenuOpen(prev => !prev)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-left text-xs font-semibold transition-colors cursor-pointer ${
+                    songMenuOpen
+                      ? isDarkMode ? 'bg-slate-800 border-indigo-500/50 text-white' : 'bg-indigo-50 border-indigo-300 text-indigo-950'
+                      : isDarkMode ? 'bg-slate-800/80 hover:bg-slate-800 border-slate-700/80 text-slate-300 hover:text-white' : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
+                  }`}
+                  title="Jump to a specific song"
+                >
+                  <ListMusic className="w-3.5 h-3.5 text-indigo-400" />
+                  <span className="hidden sm:inline truncate max-w-[130px]">
+                    {activeSongIndex !== null && setlist.songs[activeSongIndex]
+                      ? `${activeSongIndex + 1}. ${setlist.songs[activeSongIndex].title}`
+                      : 'Jump to song'}
+                  </span>
+                  <span className="sm:hidden">Songs</span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 shrink-0 ${songMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {songMenuOpen && (
+                  <div className={`absolute left-0 mt-2 w-72 sm:w-80 rounded-2xl shadow-2xl border p-2 z-50 backdrop-blur-xl animate-in fade-in duration-150 ${
+                    isDarkMode ? 'bg-slate-900/95 border-slate-800 text-white' : 'bg-white/95 border-slate-200 text-slate-900'
+                  }`}>
+                    <div className="px-2 py-1.5 flex items-center justify-between border-b border-inherit mb-1.5">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Jump to Song</span>
+                      <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400">
+                        {setlist.songs.length} total
+                      </span>
+                    </div>
+
+                    {setlist.songs.length > 4 && (
+                      <div className="px-1 mb-2">
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Search songs..."
+                            value={songFilter}
+                            onChange={(e) => setSongFilter(e.target.value)}
+                            className={`w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border outline-none ${
+                              isDarkMode
+                                ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500 focus:border-indigo-500'
+                                : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-indigo-500'
+                            }`}
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="max-h-64 overflow-y-auto space-y-1 pr-1">
+                      {(setlist.songs || [])
+                        .map((song, i) => ({ song, index: i }))
+                        .filter(({ song }) => !songFilter || song.title.toLowerCase().includes(songFilter.toLowerCase()))
+                        .map(({ song, index }) => (
+                          <button
+                            key={song.id || index}
+                            onClick={() => scrollToSong(index)}
+                            className={`w-full flex items-center justify-between p-2 rounded-xl text-left text-xs transition-colors cursor-pointer group ${
+                              activeSongIndex === index
+                                ? isDarkMode ? 'bg-indigo-600/20 text-indigo-300 font-semibold border border-indigo-500/30' : 'bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200'
+                                : isDarkMode ? 'hover:bg-slate-800/80 text-slate-200' : 'hover:bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                              <span className={`w-5 h-5 rounded flex items-center justify-center font-mono text-[10px] shrink-0 ${
+                                activeSongIndex === index
+                                  ? 'bg-indigo-500 text-white font-bold'
+                                  : isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-200 text-slate-600'
+                              }`}>
+                                {index + 1}
+                              </span>
+                              <span className="truncate">{song.title}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                isDarkMode ? 'bg-slate-800 text-amber-400' : 'bg-slate-100 text-indigo-700'
+                              }`}>
+                                {song.current_key || song.original_key || 'C'}
+                              </span>
+                              {activeSongIndex === index && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                            </div>
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Controls */}
@@ -420,16 +466,18 @@ export default function StagePage() {
             </button>
 
             {/* QR code toggle */}
-            <button
-              onClick={() => setShowQR(v => !v)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${showQR
-                  ? isDarkMode ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40' : 'bg-indigo-50 text-indigo-600 border-indigo-200'
-                  : isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                }`}
-            >
-              <QrCode className="w-3.5 h-3.5" />
-              QR
-            </button>
+            {isShared && (
+              <button
+                onClick={() => setShowQR(v => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border ${showQR
+                    ? isDarkMode ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40' : 'bg-indigo-50 text-indigo-600 border-indigo-200'
+                    : isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                  }`}
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                QR
+              </button>
+            )}
 
             {/* Sync / Upload .crd files */}
             <label
@@ -449,69 +497,66 @@ export default function StagePage() {
               />
             </label>
 
-            {/* PIN display + copy */}
-            <div className={`flex items-center rounded-xl border overflow-hidden ${isDarkMode ? 'border-slate-700' : 'border-slate-200'}`}>
-              <div className={`px-3 py-1.5 ${isDarkMode ? 'bg-slate-800' : 'bg-slate-50'}`}>
-                <p className={`text-[9px] font-semibold uppercase tracking-widest ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>PIN</p>
-                <p className="text-base font-black tracking-[0.2em] font-mono">{roomCode}</p>
-              </div>
-              <button
-                onClick={copyCode}
-                className={`px-3 py-1.5 h-full transition-colors ${isDarkMode ? 'hover:bg-slate-700 text-slate-400 hover:text-white' : 'hover:bg-slate-100 text-slate-500'}`}
-                title="Copy PIN"
-              >
-                {codeCopied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-              </button>
-            </div>
+            {/* Share toggle */}
+            <button
+              onClick={toggleShare}
+              disabled={sharingLoading}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-colors shadow-lg ${
+                isShared
+                  ? 'bg-green-600 hover:bg-green-500 text-white shadow-green-600/25'
+                  : isDarkMode
+                    ? 'bg-slate-700 hover:bg-slate-600 text-white border border-slate-600'
+                    : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-slate-200'
+              } disabled:opacity-60 disabled:cursor-not-allowed`}
+              title={isShared ? 'Click to stop sharing' : 'Click to share with band'}
+            >
+              {isShared
+                ? <Wifi className="w-4 h-4" />
+                : <WifiOff className="w-4 h-4" />}
+              {isShared ? 'Shared' : 'Share'}
+            </button>
 
-            {/* Viewer count (when live) */}
-            {isLive && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-green-500/10 border border-green-500/25 text-green-400 text-xs font-bold">
-                <Users className="w-3.5 h-3.5" />
-                {viewerCount}
-              </div>
-            )}
-
-            {/* Go Live / Stop */}
-            {!isLive ? (
+            {/* Copy link (only when shared) */}
+            {isShared && (
               <button
-                onClick={startLive}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-sm font-bold transition-colors shadow-lg shadow-red-600/25"
+                onClick={copyLink}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-colors border ${
+                  isDarkMode
+                    ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+                title="Copy share link"
               >
-                <Radio className="w-4 h-4" />
-                Go Live
-              </button>
-            ) : (
-              <button
-                onClick={stopLive}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-sm font-bold transition-colors border border-red-500/30"
-              >
-                <WifiOff className="w-4 h-4 text-red-400" />
-                Stop Live
+                {linkCopied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                {linkCopied ? 'Copied!' : 'Copy Link'}
               </button>
             )}
           </div>
         </div>
 
-        {/* Live status bar */}
-        {isLive && (
-          <div className="bg-red-600 px-4 py-1.5 flex items-center justify-center gap-3">
-            <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-            <span className="text-xs font-bold text-white tracking-wide">LIVE</span>
-            <span className="text-xs text-red-200">Viewers at <strong>/live</strong> with PIN <strong>{roomCode}</strong></span>
+        {/* Share status banner */}
+        {isShared && (
+          <div className={`px-4 py-1.5 flex items-center justify-center gap-3 ${
+            isDarkMode ? 'bg-green-900/40 border-b border-green-800/50' : 'bg-green-50 border-b border-green-200'
+          }`}>
+            <span className="w-2 h-2 rounded-full bg-green-500" />
+            <span className={`text-xs font-bold ${isDarkMode ? 'text-green-400' : 'text-green-700'}`}>SHARED</span>
+            <span className={`text-xs truncate max-w-xs ${isDarkMode ? 'text-green-500' : 'text-green-600'}`}>{shareUrl}</span>
             <button
               onClick={copyLink}
-              className="ml-2 flex items-center gap-1 text-xs text-red-200 hover:text-white transition-colors"
+              className={`ml-1 flex items-center gap-1 text-xs transition-colors ${
+                isDarkMode ? 'text-green-500 hover:text-green-300' : 'text-green-600 hover:text-green-800'
+              }`}
             >
               {linkCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-              {linkCopied ? 'Copied!' : 'Copy link'}
+              {linkCopied ? 'Copied!' : 'Copy'}
             </button>
           </div>
         )}
       </header>
 
       {/* ── QR Panel (slide-in) ── */}
-      {showQR && (
+      {showQR && isShared && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 backdrop-blur-sm p-6" onClick={() => setShowQR(false)}>
           <div
             className="relative bg-[#161618] border border-white/10 rounded-2xl p-8 shadow-2xl text-white flex flex-col items-center gap-5 max-w-xs w-full"
@@ -524,20 +569,14 @@ export default function StagePage() {
               <X className="w-4 h-4" />
             </button>
 
-            <h3 className="text-lg font-bold">Scan to Join Live</h3>
+            <h3 className="text-lg font-bold">Share Setlist</h3>
             <p className="text-xs text-zinc-400 text-center -mt-2">
-              Scan this QR code or enter the PIN below to join the live session on any device.
+              Scan this QR code or copy the link below to share your setlist.
             </p>
 
             {/* QR Code */}
             <div className="bg-white p-4 rounded-xl">
-              <QRCode value={liveUrl} size={180} />
-            </div>
-
-            {/* PIN */}
-            <div className="flex flex-col items-center gap-1">
-              <p className="text-[10px] text-zinc-500 font-semibold uppercase tracking-widest">PIN Code</p>
-              <p className="text-4xl font-black tracking-[0.3em] font-mono text-white">{roomCode}</p>
+              <QRCode value={shareUrl} size={180} />
             </div>
 
             {/* Copy link button */}
@@ -549,13 +588,17 @@ export default function StagePage() {
               {linkCopied ? 'Link Copied!' : 'Copy Share Link'}
             </button>
 
-            <p className={`text-[10px] text-center break-all ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>{liveUrl}</p>
+            <p className="text-[10px] text-center break-all text-slate-500">{shareUrl}</p>
           </div>
         </div>
       )}
 
       {/* ── Song Content ── */}
-      <div ref={scrollRef} className={`flex-1 overflow-y-auto ${isDarkMode ? 'bg-slate-950' : 'bg-slate-200/60'}`}>
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className={`flex-1 overflow-y-auto ${isDarkMode ? 'bg-slate-950' : 'bg-slate-200/60'}`}
+      >
         {!setlist?.songs || setlist.songs.length === 0 ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center p-8">
             <Music className={`w-12 h-12 ${isDarkMode ? 'text-slate-700' : 'text-slate-300'}`} />
@@ -571,16 +614,16 @@ export default function StagePage() {
           </div>
         ) : (
           <div className="py-8 px-4 flex flex-col items-center gap-0">
-            {/* "Not live" banner */}
-            {!isLive && (
+            {/* Share status hint banner */}
+            {!isShared && (
               <div className={`w-full max-w-3xl mb-6 flex items-center justify-between gap-3 px-5 py-3.5 rounded-xl border ${isDarkMode
                   ? 'bg-slate-900/60 border-slate-700 text-slate-400'
                   : 'bg-white border-slate-200 text-slate-500'
                 }`}>
                 <div className="flex items-center gap-3">
-                  <Wifi className="w-4 h-4 shrink-0" />
+                  <WifiOff className="w-4 h-4 shrink-0" />
                   <p className="text-sm">
-                    Press <strong>Go Live</strong> to start broadcasting. PIN <strong className={isDarkMode ? 'text-white' : 'text-slate-900'}>{roomCode}</strong>
+                    Press <strong className={isDarkMode ? 'text-white' : 'text-slate-900'}>Share</strong> in the toolbar to let your band view this setlist.
                   </p>
                 </div>
                 <label className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs font-bold rounded-lg cursor-pointer transition">
@@ -597,8 +640,69 @@ export default function StagePage() {
               </div>
             )}
 
+            {/* Setlist Overview / Song Index Header */}
+            {setlist.songs.length > 1 && (
+              <div className={`w-full max-w-3xl mb-8 p-4 sm:p-5 rounded-2xl border transition-colors ${
+                isDarkMode
+                  ? 'bg-slate-900/60 border-slate-800 text-white shadow-xl'
+                  : 'bg-white border-slate-200 text-slate-900 shadow-sm'
+              }`}>
+                <div className="flex items-center justify-between gap-3 mb-3 pb-2.5 border-b border-inherit">
+                  <div className="flex items-center gap-2">
+                    <ListMusic className="w-4 h-4 text-indigo-400" />
+                    <span className="text-xs font-bold uppercase tracking-wider">Setlist Songs</span>
+                  </div>
+                  <span className={`text-[11px] font-medium ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Click any song title to jump directly to it
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {setlist.songs.map((song, i) => (
+                    <button
+                      key={song.id || i}
+                      onClick={() => scrollToSong(i)}
+                      className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition-all cursor-pointer group ${
+                        activeSongIndex === i
+                          ? isDarkMode
+                            ? 'bg-indigo-950/40 border-indigo-500/50 text-white'
+                            : 'bg-indigo-50 border-indigo-300 text-indigo-950'
+                          : isDarkMode
+                            ? 'bg-slate-950/40 border-slate-800/80 hover:border-slate-700 hover:bg-slate-800/40 text-slate-200'
+                            : 'bg-slate-50 border-slate-200/80 hover:border-slate-300 hover:bg-slate-100/80 text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                        <span className={`font-mono text-xs font-bold w-5 h-5 rounded flex items-center justify-center shrink-0 ${
+                          activeSongIndex === i
+                            ? 'bg-indigo-500 text-white'
+                            : isDarkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-200 text-slate-600'
+                        }`}>
+                          {i + 1}
+                        </span>
+                        <span className="text-xs font-semibold truncate group-hover:text-indigo-400 transition-colors">
+                          {song.title}
+                        </span>
+                      </div>
+                      <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                        isDarkMode ? 'bg-slate-800 text-amber-400' : 'bg-slate-100 text-indigo-700'
+                      }`}>
+                        {song.current_key || song.original_key || 'C'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Song Cards */}
             {setlist.songs.map((song, i) => (
-              <div key={song.id || i} className="w-full max-w-3xl">
+              <div
+                key={song.id || i}
+                id={`song-${i}`}
+                className={`w-full max-w-3xl scroll-mt-6 transition-all duration-300 ${
+                  highlightedIndex === i ? 'ring-2 ring-indigo-500 ring-offset-4 ring-offset-slate-950 rounded-2xl shadow-2xl scale-[1.008]' : ''
+                }`}
+              >
                 {i > 0 && (
                   <div className="flex items-center gap-4 my-10">
                     <div className={`flex-1 h-px ${isDarkMode ? 'bg-slate-800' : 'bg-slate-300'}`} />
@@ -613,6 +717,7 @@ export default function StagePage() {
                     songIndex: i,
                     title: song.title,
                     key: song.current_key || song.original_key || 'C',
+                    originalKey: song.original_key || song.current_key || 'C',
                     content: (song as any).editorContent || song.content,
                     id: song.id,
                     raw_text: song.raw_text,
@@ -631,15 +736,35 @@ export default function StagePage() {
           </div>
         )}
       </div>
+
+      {/* Floating Back to Top Button */}
+      {showScrollTop && (
+        <button
+          onClick={() => {
+            scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+          className={`fixed bottom-6 right-6 p-3 rounded-full shadow-2xl border transition-all duration-200 cursor-pointer z-40 ${
+            isDarkMode
+              ? 'bg-slate-800/95 hover:bg-slate-700 text-white border-slate-700 shadow-black/50'
+              : 'bg-white hover:bg-slate-100 text-slate-900 border-slate-200 shadow-slate-400/30'
+          }`}
+          title="Back to Top"
+        >
+          <ArrowUp className="w-5 h-5" />
+        </button>
+      )}
     </div>
   );
 }
 
 // ── Reusable song card (host read-only, same renderer as /live) ─────────────
+const MUSICAL_KEYS = ['C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab', 'A', 'A#', 'Bb', 'B'];
+
 interface SongData {
   songIndex: number;
   title: string;
   key: string;
+  originalKey: string;
   content: object;
   id?: string;
   raw_text?: string;
@@ -652,8 +777,14 @@ const SongCard: React.FC<{
   onSongUpdate?: (updatedSong: any) => void;
 }> = ({ song, nashville, isDarkMode, onSongUpdate }) => {
   const [localKey, setLocalKey] = useState(song.key);
+  const [savedKey, setSavedKey] = useState(song.key);
+  const [isSavingKey, setIsSavingKey] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
-  useEffect(() => { setLocalKey(song.key); }, [song.key, song.songIndex]);
+  useEffect(() => {
+    setLocalKey(song.key);
+    setSavedKey(song.key);
+  }, [song.key, song.songIndex]);
 
   const rawDoc = (song as any).editorContent || song.content || {};
   const editor = useEditor({
@@ -689,7 +820,68 @@ const SongCard: React.FC<{
     editor.commands.transposeAllChords(semitones);
     import('@/utils/transposer').then(({ transposeKey }) => {
       setLocalKey(prev => transposeKey(prev, semitones));
+      setSaveSuccess(false);
     });
+  };
+
+  const handleDirectKeySelect = (newKey: string) => {
+    if (!editor || newKey === localKey) return;
+    import('@/utils/transposer').then(({ getSemitoneDifference }) => {
+      const diff = getSemitoneDifference(localKey, newKey);
+      if (diff !== 0) {
+        editor.commands.transposeAllChords(diff);
+      }
+      setLocalKey(newKey);
+      setSaveSuccess(false);
+    });
+  };
+
+  const handleResetOriginalKey = () => {
+    const orig = song.originalKey || 'C';
+    if (!editor || localKey === orig) return;
+    import('@/utils/transposer').then(({ getSemitoneDifference }) => {
+      const diff = getSemitoneDifference(localKey, orig);
+      if (diff !== 0) {
+        editor.commands.transposeAllChords(diff);
+      }
+      setLocalKey(orig);
+      setSaveSuccess(false);
+    });
+  };
+
+  const handleSaveKey = async () => {
+    if (!song.id) return;
+    setIsSavingKey(true);
+    try {
+      const newContent = editor ? editor.getJSON() : song.content;
+      const { error } = await supabase
+        .from('setlist_songs')
+        .update({
+          current_key: localKey,
+          content: newContent,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', song.id);
+
+      if (error) throw error;
+
+      setSavedKey(localKey);
+      setSaveSuccess(true);
+      if (onSongUpdate) {
+        onSongUpdate({
+          ...song,
+          key: localKey,
+          current_key: localKey,
+          content: newContent,
+        });
+      }
+      setTimeout(() => setSaveSuccess(false), 2500);
+    } catch (err: any) {
+      console.error('Failed to save key to setlist:', err);
+      alert(`Failed to save key: ${err.message}`);
+    } finally {
+      setIsSavingKey(false);
+    }
   };
 
   const hasContent = Boolean(
@@ -746,27 +938,104 @@ const SongCard: React.FC<{
       <div className={`rounded-xl shadow-lg overflow-hidden ${isDarkMode ? 'bg-slate-950 border border-slate-800 text-white' : 'bg-white text-slate-900 border border-slate-200'
         }`}>
         {/* Song header */}
-        <div className={`px-8 pt-6 pb-4 border-b flex items-center justify-between gap-4 ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}`}>
+        <div className={`px-8 pt-6 pb-4 border-b flex items-center justify-between gap-4 flex-wrap ${isDarkMode ? 'border-slate-800' : 'border-slate-100'}`}>
           <div className="flex items-center gap-3 min-w-0">
             <Music className={`w-5 h-5 shrink-0 ${isDarkMode ? 'text-slate-600' : 'text-slate-400'}`} />
-            <h2 className="text-2xl font-black tracking-tight truncate">{song.title}</h2>
+            <div>
+              <h2 className="text-2xl font-black tracking-tight truncate">{song.title}</h2>
+              {song.originalKey && song.originalKey !== localKey && (
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className={`text-[11px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Orig: <strong className={isDarkMode ? 'text-slate-300' : 'text-slate-700'}>{song.originalKey}</strong>
+                  </span>
+                  <button
+                    onClick={handleResetOriginalKey}
+                    className={`inline-flex items-center gap-1 text-[11px] font-medium underline transition-colors cursor-pointer ${
+                      isDarkMode ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'
+                    }`}
+                    title={`Reset to original key (${song.originalKey})`}
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Reset
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-          <div className={`flex items-center rounded-lg overflow-hidden border ${isDarkMode ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-slate-50'}`}>
-            <button
-              onClick={() => handleTranspose(-1)}
-              className={`px-3 py-1 font-bold transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-200 text-slate-600'}`}
-            >
-              −
-            </button>
-            <span className={`px-3 py-1 text-sm font-bold border-x ${isDarkMode ? 'border-slate-700 text-amber-400 bg-slate-950' : 'border-slate-200 text-indigo-700 bg-white'}`}>
-              Key: {localKey}
-            </span>
-            <button
-              onClick={() => handleTranspose(1)}
-              className={`px-3 py-1 font-bold transition-colors ${isDarkMode ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-200 text-slate-600'}`}
-            >
-              +
-            </button>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Key Transpose Control */}
+            <div className={`flex items-center rounded-lg overflow-hidden border ${isDarkMode ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-slate-50'}`}>
+              <button
+                onClick={() => handleTranspose(-1)}
+                className={`px-3 py-1 font-bold transition-colors cursor-pointer ${isDarkMode ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-200 text-slate-600'}`}
+                title="Transpose Down (-1 semitone)"
+              >
+                −
+              </button>
+              
+              <div className={`relative border-x flex items-center ${isDarkMode ? 'border-slate-700 bg-slate-950' : 'border-slate-200 bg-white'}`}>
+                <span className={`pl-2.5 text-xs font-bold ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Key:</span>
+                <select
+                  value={localKey}
+                  onChange={(e) => handleDirectKeySelect(e.target.value)}
+                  className={`bg-transparent py-1 pl-1 pr-2 text-sm font-bold font-mono focus:outline-none cursor-pointer ${
+                    isDarkMode ? 'text-amber-400' : 'text-indigo-700'
+                  }`}
+                  title="Select key directly"
+                >
+                  {MUSICAL_KEYS.map((k) => (
+                    <option key={k} value={k} className={isDarkMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                onClick={() => handleTranspose(1)}
+                className={`px-3 py-1 font-bold transition-colors cursor-pointer ${isDarkMode ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-200 text-slate-600'}`}
+                title="Transpose Up (+1 semitone)"
+              >
+                +
+              </button>
+            </div>
+
+            {/* Save Key to Setlist Button */}
+            {localKey !== savedKey ? (
+              <button
+                onClick={handleSaveKey}
+                disabled={isSavingKey}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-lg shadow-md transition-all cursor-pointer animate-pulse hover:animate-none disabled:opacity-50"
+                title="Save this new key to the setlist"
+              >
+                {isSavingKey ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Save className="w-3.5 h-3.5" />
+                )}
+                <span>Save Key</span>
+              </button>
+            ) : saveSuccess ? (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs font-bold">
+                <Check className="w-3.5 h-3.5" />
+                <span>Key Saved!</span>
+              </div>
+            ) : (
+              <button
+                onClick={handleSaveKey}
+                disabled={isSavingKey}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                  isDarkMode
+                    ? 'border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                    : 'border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+                }`}
+                title="Key is saved for this setlist. Click to re-save."
+              >
+                <Save className="w-3 h-3 text-slate-400" />
+                <span>Save Key</span>
+              </button>
+            )}
           </div>
         </div>
 
